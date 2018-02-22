@@ -62,6 +62,9 @@ class RNNEncoder(object):
             This is all hidden states (fw and bw hidden states are concatenated).
         """
         with vs.variable_scope("RNNEncoder"):
+
+            # Note: The bidirectional_dynamic_rnn needs the actual size of the input which can be found be summing
+            # the masks (as it has 1s for every valid input).
             input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
 
             # Note: fw_out and bw_out are the hidden states for every timestep.
@@ -69,6 +72,7 @@ class RNNEncoder(object):
             (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs, input_lens, dtype=tf.float32)
 
             # Concatenate the forward and backward hidden states
+            # shape is (batch_size, seq_len, 2*hidden_size)
             out = tf.concat([fw_out, bw_out], 2)
 
             # Apply dropout
@@ -106,6 +110,8 @@ class SimpleSoftmaxLayer(object):
         with vs.variable_scope("SimpleSoftmaxLayer"):
 
             # Linear downprojection layer
+            # Note - This creates a 'weight' matrix W and initializes it to xavier and multiplies it with inputs
+            # and adds the bias and returns this as the logits.
             logits = tf.contrib.layers.fully_connected(inputs, num_outputs=1, activation_fn=None) # shape (batch_size, seq_len, 1)
             logits = tf.squeeze(logits, axis=[2]) # shape (batch_size, seq_len)
 
@@ -162,6 +168,7 @@ class BasicAttn(object):
         with vs.variable_scope("BasicAttn"):
 
             # Calculate attention distribution
+            # Note : This assumes that the value_vec_size == key_vec_size
             values_t = tf.transpose(values, perm=[0, 2, 1]) # (batch_size, value_vec_size, num_values)
             attn_logits = tf.matmul(keys, values_t) # shape (batch_size, num_keys, num_values)
             attn_logits_mask = tf.expand_dims(values_mask, 1) # shape (batch_size, 1, num_values)
@@ -194,6 +201,12 @@ def masked_softmax(logits, mask, dim):
         The result of taking softmax over masked_logits in given dimension.
         Should be 0 in padding locations.
         Should sum to 1 over given dimension.
+
+        Here's what happens -
+        1. Create an exp mask which is -large for 0 and 0 for 1.
+        2. Add this to logits and call this newlogits.
+        3. Take softmax of newlogits.
+        4. e ^ (-large) = 0 (Genius!!)
     """
     exp_mask = (1 - tf.cast(mask, 'float')) * (-1e30) # -large where there's padding, 0 elsewhere
     masked_logits = tf.add(logits, exp_mask) # where there's padding, set logits to -large
