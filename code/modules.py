@@ -121,6 +121,52 @@ class SimpleSoftmaxLayer(object):
             return masked_logits, prob_dist
 
 
+class MultAttn(object):
+    """
+        Module for Multiplicative attention.
+        Similar to the baseline attention, the keys are the context hidden states
+        and the values are the question hidden states.
+
+               e_i = s^T * W * h_i
+               dim(s) = key_vec_size (query_vec_size)
+               W = key_vec_size * value_vec_size
+               h_i = value_vec_size
+    """
+
+    def __init__(self, keep_prob, key_vec_size, value_vec_size):
+        """
+        Inputs:
+            keep_prob: tensor containing a single scalar that is the keep probability
+            key_vec_size: size of the query vectors. int
+            value_vec_size: size of the value vectors. int
+        """
+        self.keep_prob = keep_prob
+        self.key_vec_size = key_vec_size
+        self.value_vec_size = value_vec_size
+
+    def build_graph(self, values, values_mask, keys):
+        """
+        Keys (Queries) attend to values.
+        For each key, return an attention distribution and an attention output vector.
+
+        Inputs:
+            values: Tensor shaped (batch_size, num_values, value_vec_size).
+            values_mask: Tensor shape (batch_size, num_values).
+            keys: Tensor shape (batch_size, num_keys, key_vec_size).
+        """
+
+        with vs.variable_scope("MultAttn"):
+            weights = tf.get_variable("weights", shape=(self.key_vec_size, self.value_vec_size), initializer=tf.contrib.layers.xavier_initializer())
+            keys_weights = tf.tensordot(keys, weights, axes=1) # (batch_size, num_keys, value_vec_size)
+            values_t = tf.transpose(values, perm=[0, 2, 1]) # (batch_size, value_vec_size, num_values)
+            attn_logits = tf.matmul(keys_weights, values_t) # shape (batch_size, num_keys, num_values)
+            attn_logits_mask = tf.expand_dims(values_mask, 1) # shape (batch_size, 1, num_values)
+            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2) # shape (batch_size, num_keys, num_values). take softmax over values
+            output = tf.matmul(attn_dist, values) # shape (batch_size, num_keys, value_vec_size)
+            # tf.summary.histogram("first_attention_weight", output[:,0,:])
+            output = tf.nn.dropout(output, self.keep_prob)
+            return attn_dist, output
+
 class BasicAttn(object):
     """Module for basic attention.
 
@@ -202,7 +248,7 @@ def masked_softmax(logits, mask, dim):
         Should be 0 in padding locations.
         Should sum to 1 over given dimension.
 
-        Here's what happens -
+        Here's what happens - 
         1. Create an exp mask which is -large for 0 and 0 for 1.
         2. Add this to logits and call this newlogits.
         3. Take softmax of newlogits.
