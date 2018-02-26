@@ -228,17 +228,9 @@ class BasicAttn(object):
             return attn_dist, output
 
 class SelfAttn(object):
-    """Module for basic attention.
+    """Module for calculating the self attention.
 
-    Note: in this module we use the terminology of "keys" and "values" (see lectures).
-    In the terminology of "X attends to Y", "keys attend to values".
-
-    In the baseline model, the keys are the context hidden states
-    and the values are the question hidden states.
-
-    We choose to use general terminology of keys and values in this module
-    (rather than context and question) to avoid confusion if you reuse this
-    module with other inputs.
+    In this model, we assume the keys are the context and they attend to themselves.
     """
 
     def __init__(self, keep_prob, key_vec_size):
@@ -246,14 +238,13 @@ class SelfAttn(object):
         Inputs:
           keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
           key_vec_size: size of the key vectors. int
-          value_vec_size: size of the value vectors. int
         """
         self.keep_prob = keep_prob
         self.key_vec_size = key_vec_size
 
     def build_graph(self, keys_mask, keys):
         """
-        Keys attend to values.
+        Keys attend to themselves.
         For each key, return an attention distribution and an attention output vector.
 
         Inputs:          
@@ -262,26 +253,40 @@ class SelfAttn(object):
           keys: Tensor shape (batch_size, num_keys, key_vec_size)
 
         Outputs:
-          attn_dist: Tensor shape (batch_size, num_keys, num_values).
+          attn_dist: Tensor shape (batch_size, num_keys, num_keys).
             For each key, the distribution should sum to 1,
             and should be 0 in the value locations that correspond to padding.
           output: Tensor shape (batch_size, num_keys, hidden_size).
             This is the attention output; the weighted sum of the values
             (using the attention distribution as weights).
         """
-        with vs.variable_scope("SelfAttn"):
+        with vs.variable_scope("SelfAttn", reuse=tf.AUTO_REUSE):
 
-            w1 = tf.get_variable("W1", shape=(self.key_vec_size, self.key_vec_size), initializer=tf.contrib.layers.xavier_initializer())
-            w2 = tf.get_variable("W2", shape=(self.key_vec_size, self.key_vec_size), initializer=tf.contrib.layers.xavier_initializer())
-            v = tf.get_variable("v", shape=(self.key_vec_size, 1), initializer=tf.contrib.layers.xavier_initializer())
+            xi = tf.contrib.layers.xavier_initializer()
+            w1 = tf.get_variable("W1", shape=(self.key_vec_size, self.key_vec_size), initializer=xi)
+            w2 = tf.get_variable("W2", shape=(self.key_vec_size, self.key_vec_size), initializer=xi)
+            v = tf.get_variable("v", shape=(self.key_vec_size, 1), initializer=xi)
 
-            attn_logits = tf.nn.tanh(tf.tensordot(keys, w1, axes=1) + tf.tensordot(keys, w2, axes=1)) # (batch_size, num_keys, key_vec_size)
-            attn_logits = tf.expand_dims(attn_logits, 3) # (batch_size, num_keys, key_vec_size, 1)
-            attn_logits = tf.squeeze(tf.multiply(attn_logits, v), axis=3) # shape (batch_size, num_keys, key_vec_size)            
-            keys_t = tf.transpose(keys, perm=[0, 2, 1]) # (batch_size, key_vec_size, num_keys)
-            attn_logits = tf.matmul(attn_logits, keys_t) # shape (batch_size, num_keys, num_keys)
-            attn_logits_mask = tf.expand_dims(keys_mask, 1) # shape (batch_size, 1, num_keys)            
-            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2) # shape (batch_size, num_keys, num_keys). take softmax over values
+            # (batch_size, num_keys, key_vec_size)
+            attn_logits = tf.nn.tanh(tf.tensordot(keys, w1, axes=1) + tf.tensordot(keys, w2, axes=1))
+
+            # (batch_size, num_keys, key_vec_size, 1)
+            attn_logits = tf.expand_dims(attn_logits, 3)
+
+            # (batch_size, num_keys, key_vec_size)
+            attn_logits = tf.squeeze(tf.multiply(attn_logits, v), axis=3)
+
+            # (batch_size, key_vec_size, num_keys)
+            keys_t = tf.transpose(keys, perm=[0, 2, 1])
+
+            # (batch_size, num_keys, num_keys)
+            attn_logits = tf.matmul(attn_logits, keys_t)
+
+            # (batch_size, 1, num_keys)
+            attn_logits_mask = tf.expand_dims(keys_mask, 1)
+
+            # (batch_size, num_keys, num_keys). take softmax over values
+            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2) 
 
             # Use attention distribution to take weighted sum of values
             output = tf.matmul(attn_dist, keys) # shape (batch_size, num_keys, key_vec_size)
@@ -290,18 +295,6 @@ class SelfAttn(object):
             output = tf.nn.dropout(output, self.keep_prob)
 
             return attn_dist, output
-
-            """
-            weights = tf.get_variable("weights", shape=(self.key_vec_size, self.key_vec_size), initializer=tf.contrib.layers.xavier_initializer())
-            keys_weights = tf.tensordot(keys, weights, axes=1) # (batch_size, num_keys, value_vec_size)
-            keys_t = tf.transpose(keys, perm=[0, 2, 1]) # (batch_size, value_vec_size, num_values)
-            attn_logits = tf.matmul(keys_weights, keys_t) # shape (batch_size, num_keys, num_values)
-            attn_logits_mask = tf.expand_dims(keys_mask, 1) # shape (batch_size, 1, num_values)
-            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2) # shape (batch_size, num_keys, num_values). take softmax over values
-            output = tf.matmul(attn_dist, keys) # shape (batch_size, num_keys, value_vec_size)
-            output = tf.nn.dropout(output, self.keep_prob)
-            return attn_dist, output
-            """
 
 def masked_softmax(logits, mask, dim):
     """
