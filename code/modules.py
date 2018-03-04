@@ -120,7 +120,6 @@ class SimpleSoftmaxLayer(object):
 
             return masked_logits, prob_dist
 
-
 class BasicAttn(object):
     """Module for basic attention.
 
@@ -181,6 +180,99 @@ class BasicAttn(object):
             output = tf.nn.dropout(output, self.keep_prob)
 
             return attn_dist, output
+
+
+class BidafAttn(object):
+    """Module for bidaf attention.
+
+    Note: in this module we use the terminology of "keys" and "values" (see lectures).
+    In the terminology of "X attends to Y", "keys attend to values".
+
+    In the bidaf model, the keys are the context hidden states and the values are the question hidden states.
+    The attention flows both ways i.e from context to question and question to context.
+
+    """
+
+    def __init__(self, keep_prob, key_vec_size, value_vec_size):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          key_vec_size: size of the key vectors. int
+          value_vec_size: size of the value vectors. int
+        """
+        self.keep_prob = keep_prob
+        self.key_vec_size = key_vec_size
+        self.value_vec_size = value_vec_size
+
+    def build_graph(self, values, values_mask, keys, keys_mask):
+        """
+        Keys attend to values.
+        For each key, return an attention distribution and an attention output vector.
+
+        Inputs:
+          values: Tensor shape (batch_size, num_values, value_vec_size).
+          values_mask: Tensor shape (batch_size, num_values).
+            1s where there's real input, 0s where there's padding
+          keys: Tensor shape (batch_size, num_keys, value_vec_size)
+
+        Outputs:
+          attn_dist: Tensor shape (batch_size, num_keys, num_values).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          output: Tensor shape (batch_size, num_keys, hidden_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("BidafAttn"):
+
+
+            # shape : 2*Hidden_size
+            wsim1 = tf.get_variable("wsim1", shape=[self.key_vec_size], dtype=tf.float32,
+                                    initializer=tf.contrib.layers.xavier_initializer())
+            # shape : 2*Hidden_size
+            wsim2 = tf.get_variable("wsim2", shape=[self.key_vec_size], dtype=tf.float32,
+                                    initializer=tf.contrib.layers.xavier_initializer())
+            # shape : 2*Hidden_size
+            wsim3 = tf.get_variable("wsim3", shape=[self.key_vec_size], dtype=tf.float32,
+                                    initializer=tf.contrib.layers.xavier_initializer())
+            # shape : (batch_size, num_keys, 1, key_vec_size)
+            expanded_keys = tf.expand_dims(keys, 2)
+            # shape : (batch_size, 1, num_values, value_vec_size)
+            expanded_values = tf.expand_dims(values, 1)
+            # shape :  (batch_size, num_keys, 1)
+            sim1 = tf.reduce_sum(tf.multiply(expanded_keys, wsim1), axis=3)
+            # shape :  (batch_size, 1, num_values)
+            sim2 = tf.reduce_sum(tf.multiply(expanded_values, wsim2), axis=3)
+            # shape : batch_size, num_keys, num_values, key_vec_size
+            keysdotvalues = tf.multiply(expanded_keys, expanded_values)
+            # shape : (batch_size, num_keys, num_values)
+            sim3= tf.reduce_sum(tf.multiply(keysdotvalues, wsim3), axis=3)
+
+            # shape : (batch_size, num_keys, num_values)
+            sim = sim1 + sim2 + sim3
+
+            attn_logits_mask = tf.expand_dims(values_mask, 1) # shape (batch_size, 1, num_values)
+            _, c2q_attn_dist = masked_softmax(sim, attn_logits_mask, 2) # shape (batch_size, num_keys, num_values). take softmax over values
+            # shape : batch_size, num_keys, value_vec_size
+            alpha = tf.matmul(c2q_attn_dist, values)
+
+            # shape : (batch_size, num_keys)
+            m = tf.reduce_max(sim, axis=2)
+
+            _, q2c_attn_dist = masked_softmax(m, keys_mask, 1)  # shape (batch_size, num_keys). take softmax over keys
+            # (batch_size, 1, key_vec_size)
+            c = tf.transpose(tf.matmul(tf.transpose(keys, perm=[0, 2, 1]), tf.expand_dims(q2c_attn_dist, axis=2)), perm=[0, 2, 1])
+
+            # shape : (batch_size, num_keys, key_vec_size)
+            keymulc = tf.multiply(keys, c)
+
+            # shape : batch_size, num_keys, 3*key_vec_size
+            output = tf.concat([alpha, tf.tile(c, multiples=[1, keys.get_shape()[1], 1]), keymulc], axis = 2)
+
+            # Apply dropout
+            output = tf.nn.dropout(output, self.keep_prob)
+
+            return q2c_attn_dist, output
 
 
 def masked_softmax(logits, mask, dim):
