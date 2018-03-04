@@ -284,11 +284,8 @@ class BahdanauAttn(object):
             w2_keys.set_shape((keys_shape[0], keys_shape[1], self.bahdanau_size))
             w2_keys = tf.expand_dims(w2_keys, axis=2)
 
-            # (batch_size, num_keys, num_values, bahdanau_size, 1)
-            attn_logits = tf.expand_dims(tf.nn.tanh(w1_values + w2_keys), axis=4)
-
             # (batch_size, num_keys, num_values)
-            attn_logits = tf.reduce_sum(tf.squeeze(tf.multiply(attn_logits, v), axis=4), axis=3)
+            attn_logits = tf.reduce_sum(tf.squeeze(tf.multiply(tf.expand_dims(tf.nn.tanh(w1_values + w2_keys), axis=4), v), axis=4), axis=3)
 
             # (batch_size, 1, num_values)
             attn_logits_mask = tf.expand_dims(values_mask, 1)
