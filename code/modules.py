@@ -227,10 +227,78 @@ class BasicAttn(object):
 
             return attn_dist, output
 
-class BahdanauAttn(object):
-    """Module for calculating the self attention.
+class SelfAttn(object):
+    """Module for calculating the Additive attention.
+    In this model, the keys attend to the values.
+    """
 
-    In this model, we assume the keys are the context and they attend to themselves.
+    def __init__(self, keep_prob, key_vec_size, bahdanau_size):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          key_vec_size: size of the key vectors. int
+          bahdanau_size: Size of Bahdanau vectors. int (d3 in the slides)
+        """
+        self.keep_prob = keep_prob
+        self.key_vec_size = key_vec_size
+        self.bahdanau_size = bahdanau_size
+
+
+    def build_graph(self, keys_mask, keys):
+        """
+        Keys attend to themselves.
+        For each key, return an attention distribution and an attention output vector.
+
+        Inputs:
+          keys_mask: Tensor shape (batch_size, num_keys).
+            1s where there's real input, 0s where there's padding
+          keys: Tensor shape (batch_size, num_keys, key_vec_size)
+
+        Outputs:
+          attn_dist: Tensor shape (batch_size, num_keys, num_values).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          output: Tensor shape (batch_size, num_keys, hidden_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("SelfAttn"):
+
+            xi = tf.contrib.layers.xavier_initializer()
+            w1 = tf.get_variable("W1", shape=(self.key_vec_size, self.bahdanau_size), initializer=xi)
+            v = tf.get_variable("v", shape=(self.bahdanau_size), initializer=xi)
+
+            # (batch_size, num_keys, 1, bahdanau_size)
+            keys_shape = keys.get_shape()
+            w1_keys = tf.tensordot(keys, w1, axes=1)
+            w1_keys.set_shape((keys_shape[0], keys_shape[1], self.bahdanau_size))
+            w1_keys_ax2 = tf.expand_dims(w1_keys, axis=2)
+            w1_keys_ax1 = tf.expand_dims(w1_keys, axis=1)
+
+            # (batch_size, num_keys, num_keys)
+            attn_logits = tf.reduce_sum(tf.multiply(tf.nn.tanh(w1_keys_ax2 + w1_keys_ax1), v), axis=3)
+
+            # (batch_size, 1, num_keys)
+            attn_logits_mask = tf.expand_dims(keys_mask, 1)
+
+            # (batch_size, num_keys, num_keys). take softmax over values
+            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2)
+
+            # Use attention distribution to take weighted sum of values
+            output = tf.matmul(attn_dist, keys) # shape (batch_size, num_keys, key_vec_size)
+
+            # Apply dropout
+            output = tf.nn.dropout(output, self.keep_prob)
+
+            # Apply BiDirectional RNN to output
+            encoder = RNNEncoder(self.bahdanau_size, self.keep_prob)
+            hiddens = encoder.build_graph(output, keys_mask)
+
+            return attn_dist, hiddens
+
+class BahdanauAttn(object):
+    """Module for calculating the Additive attention.
+    In this model, the keys attend to the values.
     """
 
     def __init__(self, keep_prob, key_vec_size, value_vec_size, bahdanau_size):
@@ -291,7 +359,7 @@ class BahdanauAttn(object):
             attn_logits_mask = tf.expand_dims(values_mask, 1)
 
             # (batch_size, num_keys, num_values). take softmax over values
-            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2) 
+            _, attn_dist = masked_softmax(attn_logits, attn_logits_mask, 2)
 
             # Use attention distribution to take weighted sum of values
             output = tf.matmul(attn_dist, values) # shape (batch_size, num_keys, key_vec_size)
