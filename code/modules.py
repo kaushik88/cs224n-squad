@@ -268,11 +268,15 @@ class SelfAttn(object):
             w1 = tf.get_variable("W1", shape=(self.key_vec_size, self.bahdanau_size), initializer=xi)
             v = tf.get_variable("v", shape=(self.bahdanau_size), initializer=xi)
 
-            # (batch_size, num_keys, 1, bahdanau_size)
+            # (batch_size, num_keys, bahdanau_size)
             keys_shape = keys.get_shape()
             w1_keys = tf.tensordot(keys, w1, axes=1)
             w1_keys.set_shape((keys_shape[0], keys_shape[1], self.bahdanau_size))
+            
+            # (batch_size, num_keys, 1, bahdanau_size)
             w1_keys_ax2 = tf.expand_dims(w1_keys, axis=2)
+
+            # (batch_size, 1, num_keys, bahdanau_size)
             w1_keys_ax1 = tf.expand_dims(w1_keys, axis=1)
 
             # (batch_size, num_keys, num_keys)
