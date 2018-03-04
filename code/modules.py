@@ -274,7 +274,7 @@ class BahdanauAttn(object):
 
             # (batch_size, 1, num_values, bahdanau_size)
             value_shape = values.get_shape()
-            w1_values = tf.matmul(values, tf.tile(tf.expand_dims(w1, 0), [100, 1 ,1]))
+            w1_values = tf.tensordot(values, w1, axes=1)
             w1_values.set_shape((value_shape[0], value_shape[1], self.bahdanau_size))
             w1_values = tf.expand_dims(w1_values, axis=1)
 
