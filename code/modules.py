@@ -233,7 +233,7 @@ class BahdanauAttn(object):
     In this model, we assume the keys are the context and they attend to themselves.
     """
 
-    def __init__(self, keep_prob, key_vec_size, value_vec_size, bahdanau_size):
+    def __init__(self, keep_prob, key_vec_size, value_vec_size, bahdanau_size, batch_size):
         """
         Inputs:
           keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
@@ -245,6 +245,7 @@ class BahdanauAttn(object):
         self.key_vec_size = key_vec_size
         self.value_vec_size = value_vec_size
         self.bahdanau_size = bahdanau_size
+        self.batch_size = batch_size
 
     def build_graph(self, values, values_mask, keys):
         """
@@ -273,15 +274,11 @@ class BahdanauAttn(object):
             v = tf.get_variable("v", shape=(self.bahdanau_size), initializer=xi)
 
             # (batch_size, 1, num_values, bahdanau_size)
-            value_shape = values.get_shape()
-            w1_values = tf.tensordot(values, w1, axes=1)
-            w1_values.set_shape((value_shape[0], value_shape[1], self.bahdanau_size))
+            w1_values = tf.matmul(values, tf.tile(tf.expand_dims(w1, 0), [self.batch_size, 1 ,1]))
             w1_values = tf.expand_dims(w1_values, axis=1)
 
             # (batch_size, num_keys, 1, bahdanau_size)
-            keys_shape = keys.get_shape()
-            w2_keys = tf.tensordot(keys, w2, axes=1)
-            w2_keys.set_shape((keys_shape[0], keys_shape[1], self.bahdanau_size))
+            w2_keys = tf.matmul(keys, tf.tile(tf.expand_dims(w2, 0), [self.batch_size, 1, 1]))
             w2_keys = tf.expand_dims(w2_keys, axis=2)
 
             # (batch_size, num_keys, num_values)
