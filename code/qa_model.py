@@ -139,7 +139,7 @@ class QAModel(object):
         _, attn_output = attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens) # attn_output is shape (batch_size, context_len, hidden_size*2)
 
         # Use context hidden states to attend to itself.
-        self_attn_layer = BahdanauAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2, self.FLAGS.bahdanau_size, self.FLAGS.batch_size)
+        self_attn_layer = BahdanauAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2, self.FLAGS.bahdanau_size)
         _, self_attn_output = self_attn_layer.build_graph(context_hiddens, self.context_mask, context_hiddens)
 
         # Concat attn_output to context_hiddens to get blended_reps
