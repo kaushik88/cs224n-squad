@@ -243,10 +243,12 @@ class BidafAttn(object):
             sim1 = tf.reduce_sum(tf.multiply(expanded_keys, wsim1), axis=3)
             # shape :  (batch_size, 1, num_values)
             sim2 = tf.reduce_sum(tf.multiply(expanded_values, wsim2), axis=3)
-            # shape : batch_size, num_keys, num_values, key_vec_size
-            keysdotvalues = tf.multiply(expanded_keys, expanded_values)
+            # shape : (batch_size, 1, num_values)
+            intermediate_sim1 = tf.reduce_sum(tf.multiply(expanded_values, wsim3), axis=3)
+            # shape : (batch_size, num_keys, 1)
+            intermediate_sim2 = tf.reduce_sum(tf.multiply(expanded_keys, wsim3), axis=3)
             # shape : (batch_size, num_keys, num_values)
-            sim3= tf.reduce_sum(tf.multiply(keysdotvalues, wsim3), axis=3)
+            sim3 = tf.multiply(intermediate_sim2, intermediate_sim1)
 
             # shape : (batch_size, num_keys, num_values)
             sim = sim1 + sim2 + sim3
@@ -267,7 +269,7 @@ class BidafAttn(object):
             keymulc = tf.multiply(keys, c)
 
             # shape : batch_size, num_keys, 3*key_vec_size
-            output = tf.concat([alpha, tf.tile(c, multiples=[1, keys.get_shape()[1], 1]), keymulc], axis = 2)
+            output = tf.concat([alpha, tf.multiply(keys, alpha), keymulc], axis = 2)
 
             # Apply dropout
             output = tf.nn.dropout(output, self.keep_prob)
