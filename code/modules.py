@@ -270,7 +270,7 @@ class BahdanauAttn(object):
             xi = tf.contrib.layers.xavier_initializer()
             w1 = tf.get_variable("W1", shape=(self.value_vec_size, self.bahdanau_size), initializer=xi)
             w2 = tf.get_variable("W2", shape=(self.key_vec_size, self.bahdanau_size), initializer=xi)
-            v = tf.get_variable("v", shape=(self.bahdanau_size, 1), initializer=xi)
+            v = tf.get_variable("v", shape=(self.bahdanau_size), initializer=xi)
 
             # (batch_size, 1, num_values, bahdanau_size)
             value_shape = values.get_shape()
@@ -285,7 +285,7 @@ class BahdanauAttn(object):
             w2_keys = tf.expand_dims(w2_keys, axis=2)
 
             # (batch_size, num_keys, num_values)
-            attn_logits = tf.reduce_sum(tf.squeeze(tf.multiply(tf.expand_dims(tf.nn.tanh(w1_values + w2_keys), axis=4), v), axis=4), axis=3)
+            attn_logits = tf.reduce_sum(tf.multiply(tf.nn.tanh(w1_values + w2_keys), v), axis=3)
 
             # (batch_size, 1, num_values)
             attn_logits_mask = tf.expand_dims(values_mask, 1)
