@@ -266,21 +266,27 @@ class SelfAttn(object):
 
             xi = tf.contrib.layers.xavier_initializer()
             w1 = tf.get_variable("W1", shape=(self.key_vec_size, self.bahdanau_size), dtype = tf.float32, initializer=xi)
+            w2 = tf.get_variable("W2", shape=(self.key_vec_size, self.bahdanau_size), dtype = tf.float32, initializer=xi)
             v = tf.get_variable("v", shape=(self.bahdanau_size), dtype = tf.float32, initializer=xi)
 
-            # (batch_size, num_keys, bahdanau_size)
+            # (batch_size, num_keys, 1)
             keys_shape = keys.get_shape()
             w1_keys = tf.tensordot(keys, w1, axes=1)
             w1_keys.set_shape((keys_shape[0], keys_shape[1], self.bahdanau_size))
+            w1_keys = tf.multiply(tf.nn.tanh(w1_keys), v)
+            w1_keys = tf.reduce_sum(w1_keys, axis = 2, keep_dims=True)
 
-            # (batch_size, num_keys, 1, bahdanau_size)
-            w1_keys_ax2 = tf.expand_dims(w1_keys, axis=2)
-
-            # (batch_size, 1, num_keys, bahdanau_size)
-            w1_keys_ax1 = tf.expand_dims(w1_keys, axis=1)
+            # (batch_size, 1, num_keys)
+            w2_keys = tf.tensordot(keys, w2, axes=1)
+            w2_keys.set_shape((keys_shape[0], keys_shape[1], self.bahdanau_size))
+            w2_keys = tf.multiply(tf.nn.tanh(w2_keys), v)
+            w2_keys = tf.reduce_sum(w2_keys, axis = 2, keep_dims=True)
+            w2_keys_t = tf.transpose(w2_keys, perm=[0, 2, 1])
 
             # (batch_size, num_keys, num_keys)
-            attn_logits = tf.reduce_sum(tf.multiply(tf.nn.tanh(w1_keys_ax2 + w1_keys_ax1), v), axis=3)
+            attn_logits_num = w1_keys + w2_keys_t
+            attn_logits_denom = 1 + tf.exp(-20.0) - tf.multiply(w1_keys, w2_keys_t)
+            attn_logits = tf.divide(attn_logits_num, attn_logits_denom)
 
             # (batch_size, 1, num_keys)
             attn_logits_mask = tf.expand_dims(keys_mask, 1)
@@ -340,24 +346,30 @@ class BahdanauAttn(object):
         with vs.variable_scope("BahdanauAttn", reuse=tf.AUTO_REUSE):
 
             xi = tf.contrib.layers.xavier_initializer()
-            w1 = tf.get_variable("W1", shape=(self.value_vec_size, self.bahdanau_size), initializer=xi)
-            w2 = tf.get_variable("W2", shape=(self.key_vec_size, self.bahdanau_size), initializer=xi)
-            v = tf.get_variable("v", shape=(self.bahdanau_size), initializer=xi)
+            w1 = tf.get_variable("W1", shape=(self.value_vec_size, self.bahdanau_size), dtype=tf.float32, initializer=xi)
+            w2 = tf.get_variable("W2", shape=(self.key_vec_size, self.bahdanau_size), dtype=tf.float32, initializer=xi)
+            v = tf.get_variable("v", shape=(self.bahdanau_size), initializer=xi, dtype=tf.float32)
 
-            # (batch_size, 1, num_values, bahdanau_size)
-            value_shape = values.get_shape()
-            w1_values = tf.tensordot(values, w1, axes=1)
-            w1_values.set_shape((value_shape[0], value_shape[1], self.bahdanau_size))
-            w1_values = tf.expand_dims(w1_values, axis=1)
-
-            # (batch_size, num_keys, 1, bahdanau_size)
+            # (batch_size, num_keys, 1)
             keys_shape = keys.get_shape()
             w2_keys = tf.tensordot(keys, w2, axes=1)
             w2_keys.set_shape((keys_shape[0], keys_shape[1], self.bahdanau_size))
-            w2_keys = tf.expand_dims(w2_keys, axis=2)
+            w2_keys = tf.multiply(tf.nn.tanh(w2_keys), v)
+            w2_keys = tf.reduce_sum(w2_keys, axis = 2, keep_dims=True)
+
+            # (batch_size, 1, num_values)
+            value_shape = values.get_shape()
+            w1_values = tf.tensordot(values, w1, axes=1)
+            w1_values.set_shape((value_shape[0], value_shape[1], self.bahdanau_size))
+            w1_values = tf.multiply(tf.nn.tanh(w1_values), v)
+            w1_values = tf.reduce_sum(w1_values, axis = 2, keep_dims=True)
+            w1_values = tf.transpose(w1_values, perm=[0, 2, 1])
 
             # (batch_size, num_keys, num_values)
-            attn_logits = tf.reduce_sum(tf.multiply(tf.nn.tanh(w1_values + w2_keys), v), axis=3)
+            attn_logits_num = w2_keys + w1_values
+            attn_logits_denom = 1 - tf.multiply(w2_keys, w1_values)
+            attn_logits_denom = attn_logits_denom + tf.exp(-20.0)
+            attn_logits = tf.divide(attn_logits_num, attn_logits_denom)
 
             # (batch_size, 1, num_values)
             attn_logits_mask = tf.expand_dims(values_mask, 1)
