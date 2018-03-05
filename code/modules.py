@@ -285,7 +285,7 @@ class SelfAttn(object):
 
             # (batch_size, num_keys, num_keys)
             attn_logits_num = w1_keys + w2_keys_t
-            attn_logits_denom = 1 + tf.exp(-20.0) - tf.multiply(w1_keys, w2_keys_t)
+            attn_logits_denom = 1 + tf.multiply(w1_keys, w2_keys_t)
             attn_logits = tf.divide(attn_logits_num, attn_logits_denom)
 
             # (batch_size, 1, num_keys)
@@ -302,7 +302,7 @@ class SelfAttn(object):
 
             # Apply BiDirectional RNN to output
             encoder = RNNEncoder(self.bahdanau_size, self.keep_prob)
-            hiddens = encoder.build_graph(output, keys_mask)
+            hiddens = encoder.build_graph(tf.concat([keys, output], axis=2), keys_mask)
 
             return attn_dist, hiddens
 
@@ -367,8 +367,8 @@ class BahdanauAttn(object):
 
             # (batch_size, num_keys, num_values)
             attn_logits_num = w2_keys + w1_values
-            attn_logits_denom = 1 - tf.multiply(w2_keys, w1_values)
-            attn_logits_denom = attn_logits_denom + tf.exp(-20.0)
+            attn_logits_denom = 1  + tf.multiply(w2_keys, w1_values)
+            attn_logits_denom = attn_logits_denom
             attn_logits = tf.divide(attn_logits_num, attn_logits_denom)
 
             # (batch_size, 1, num_values)
