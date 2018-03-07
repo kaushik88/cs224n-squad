@@ -287,7 +287,7 @@ class BasicSelfAttn(object):
             output = tf.nn.dropout(output, self.keep_prob)
 
             # Apply BiDirectional RNN to output
-            encoder = RNNEncoder(self.key_vec_size, self.keep_prob)
+            encoder = RNNEncoder(self.key_vec_size / 2, self.keep_prob)
             hiddens = encoder.build_graph(tf.concat([keys, output], axis=2), values_mask)
 
             return attn_dist, hiddens
@@ -368,6 +368,7 @@ class SelfAttn(object):
             # Apply BiDirectional RNN to output
             encoder = RNNEncoder(self.bahdanau_size, self.keep_prob)
             hiddens = encoder.build_graph(tf.concat([keys, output], axis=2), keys_mask)
+            hiddens = tf.nn.dropout(hiddens, self.keep_prob)
 
             return attn_dist, hiddens
 
