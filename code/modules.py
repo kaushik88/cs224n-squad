@@ -283,11 +283,8 @@ class BasicSelfAttn(object):
             # Use attention distribution to take weighted sum of values
             output = tf.matmul(attn_dist, values) # shape (batch_size, num_keys, value_vec_size)
 
-            # Apply dropout
-            output = tf.nn.dropout(output, self.keep_prob)
-
             # Apply BiDirectional RNN to output
-            encoder = RNNEncoder(self.key_vec_size / 2, self.keep_prob)
+            encoder = RNNEncoder(self.key_vec_size, self.keep_prob)
             hiddens = encoder.build_graph(tf.concat([keys, output], axis=2), values_mask)
 
             return attn_dist, hiddens
