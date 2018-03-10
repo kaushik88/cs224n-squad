@@ -30,7 +30,7 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
-from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, CoAttn
+from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, CoAttn, MultiRNNEncoder
 
 logging.basicConfig(level=logging.INFO)
 
@@ -130,7 +130,7 @@ class QAModel(object):
         # Use a RNN to get hidden states for the context and the question
         # Note: here the RNNEncoder is shared (i.e. the weights are the same)
         # between the context and the question.
-        encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
+        encoder = MultiRNNEncoder(self.FLAGS.hidden_size, self.keep_prob, self.FLAGS.num_layers)
         context_hiddens = encoder.build_graph(self.context_embs, self.context_mask) # (batch_size, context_len, hidden_size*2)
         question_hiddens = encoder.build_graph(self.qn_embs, self.qn_mask) # (batch_size, question_len, hidden_size*2)
 
