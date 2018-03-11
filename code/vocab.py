@@ -26,6 +26,9 @@ _UNK = b"<unk>"
 _START_VOCAB = [_PAD, _UNK]
 PAD_ID = 0
 UNK_ID = 1
+CHAR_PAD_ID = 70
+CHAR_UNK_ID = 71
+ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789-,;.!?:'\"/\\|_@#$%^&*~`+-=<>()[]{}\n"
 
 
 def get_glove(glove_path, glove_dim):
