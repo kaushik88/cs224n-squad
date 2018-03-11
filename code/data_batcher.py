@@ -136,27 +136,33 @@ def refill_batches(batches, word2id, context_file, qn_file, ans_file, batch_size
             continue
         ans_tokens = context_tokens[ans_span[0] : ans_span[1]+1] # list of strings
 
-        # discard or truncate too-long words
+        # always truncate too long words
         for context_char_id in context_char_ids :
             if len(context_char_id) > word_len:
-                if discard_long:
-                    continue
-                else:
-                    context_char_id=context_char_id[:word_len]
+                context_char_id=context_char_id[:word_len]
             if len(context_char_id) < word_len :
                 context_char_id.extend([CHAR_PAD_ID] * (word_len - len(context_char_id)))
         context_char_ids_flat = [item for sublist in context_char_ids for item in sublist]
+        context_char_len = context_len * word_len
+        if len(context_char_ids_flat) > context_char_len:
+            if discard_long:
+                continue
+            else:
+                context_char_ids_flat = context_char_ids_flat[:context_char_len]
 
-        # discard or truncate too-long words
+        # always truncate too long words
         for qn_char_id in qn_char_ids :
             if len(qn_char_id) > word_len:
-                if discard_long:
-                    continue
-                else:
-                    qn_char_id=qn_char_id[:word_len]
+                context_char_id=context_char_id[:word_len]
             if len(qn_char_id) < word_len :
                 qn_char_id.extend([CHAR_PAD_ID] * (word_len - len(qn_char_id)))
+        question_char_len = question_len * word_len
         qn_char_ids_flat = [item for sublist in qn_char_ids for item in sublist]
+        if len(qn_char_ids_flat) > question_char_len:
+            if discard_long:
+                continue
+            else:
+                qn_char_ids_flat = qn_char_ids_flat[:question_char_len]
 
         # discard or truncate too-long questions
         if len(qn_ids) > question_len:
