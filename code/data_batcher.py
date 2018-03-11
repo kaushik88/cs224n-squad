@@ -95,8 +95,9 @@ def padded(token_batch, char_batch, word_len, batch_pad=0):
         All are same length - batch_pad if batch_pad!=0, otherwise the maximum length in token_batch
     """
     maxlen = max(map(lambda x: len(x), token_batch)) if batch_pad == 0 else batch_pad
+    maxcharlen = max(map(lambda x: len(x), char_batch)) if batch_pad == 0 else (batch_pad * word_len)
     word_pad = map(lambda token_list: token_list + [PAD_ID] * (maxlen - len(token_list)), token_batch)
-    char_pad = map(lambda char_token_list: char_token_list + ([CHAR_PAD_ID] * (maxlen * word_len - len(char_token_list))), char_batch)
+    char_pad = map(lambda char_token_list: char_token_list + [CHAR_PAD_ID] * (maxcharlen - len(char_token_list)), char_batch)
     return (word_pad,char_pad)
 
 
