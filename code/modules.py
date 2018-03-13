@@ -81,6 +81,71 @@ class RNNEncoder(object):
             return out
 
 
+class MultiRNNEncoder(object):
+    """
+    General-purpose module to encode a sequence using a RNN.
+    It feeds the input through a RNN and returns all the hidden states.
+
+    Note: In lecture 8, we talked about how you might use a RNN as an "encoder"
+    to get a single, fixed size vector representation of a sequence
+    (e.g. by taking element-wise max of hidden states).
+    Here, we're using the RNN as an "encoder" but we're not taking max;
+    we're just returning all the hidden states. The terminology "encoder"
+    still applies because we're getting a different "encoding" of each
+    position in the sequence, and we'll use the encodings downstream in the model.
+
+    This code uses a bidirectional GRU, but you could experiment with other types of RNN.
+    """
+
+    def __init__(self, hidden_size, keep_prob, num_layers):
+        """
+        Inputs:
+          hidden_size: int. Hidden size of the RNN
+          keep_prob: Tensor containing a single scalar that is the keep probability (for dropout)
+        """
+        self.hidden_size = hidden_size
+        self.keep_prob = keep_prob
+        self.num_layers = num_layers
+        self.rnn_cell_fw = [rnn_cell.GRUCell(self.hidden_size) for _ in range(self.num_layers)]
+        self.rnn_cell_fw = [DropoutWrapper(cell, input_keep_prob=self.keep_prob) for cell in self.rnn_cell_fw]
+        self.multi_rnn_cell_fw = rnn_cell.MultiRNNCell(self.rnn_cell_fw, state_is_tuple=False)
+
+        self.rnn_cell_bw = [rnn_cell.GRUCell(self.hidden_size) for _ in range(self.num_layers)]
+        self.rnn_cell_bw = [DropoutWrapper(cell, input_keep_prob=self.keep_prob) for cell in self.rnn_cell_bw]
+        self.multi_rnn_cell_bw = rnn_cell.MultiRNNCell(self.rnn_cell_bw, state_is_tuple=False)
+
+    def build_graph(self, inputs, masks):
+        """
+        Inputs:
+          inputs: Tensor shape (batch_size, seq_len, input_size)
+          masks: Tensor shape (batch_size, seq_len).
+            Has 1s where there is real input, 0s where there's padding.
+            This is used to make sure tf.nn.bidirectional_dynamic_rnn doesn't iterate through masked steps.
+
+        Returns:
+          out: Tensor shape (batch_size, seq_len, hidden_size*2).
+            This is all hidden states (fw and bw hidden states are concatenated).
+        """
+        with vs.variable_scope("MultiRNNEncoder"):
+
+            # Note: The bidirectional_dynamic_rnn needs the actual size of the input which can be found be summing
+            # the masks (as it has 1s for every valid input).
+            input_lens = tf.reduce_sum(masks, reduction_indices=1) # shape (batch_size)
+
+            # Note: fw_out and bw_out are the hidden states for every timestep.
+            # Each is shape (batch_size, seq_len, hidden_size).
+            (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.multi_rnn_cell_fw, self.multi_rnn_cell_bw, inputs, input_lens, dtype=tf.float32)
+
+            # Concatenate the forward and backward hidden states
+            # shape is (batch_size, seq_len, 2*hidden_size)
+            out = tf.concat([fw_out, bw_out], 2)
+
+            # Apply dropout
+            out = tf.nn.dropout(out, self.keep_prob)
+
+            return out
+
+
 class SimpleSoftmaxLayer(object):
     """
     Module to take set of hidden states, (e.g. one for each context location),
@@ -180,6 +245,91 @@ class BasicAttn(object):
             output = tf.nn.dropout(output, self.keep_prob)
 
             return attn_dist, output
+
+class CoAttn(object):
+    """Module for Co Attention.
+
+    Note: in this module we use the terminology of "keys" and "values" (see lectures).
+    In the terminology of "X attends to Y", "keys attend to values".
+    """
+
+    def __init__(self, keep_prob, key_vec_size, value_vec_size):
+        """
+        Inputs:
+          keep_prob: tensor containing a single scalar that is the keep probability (for dropout)
+          key_vec_size: size of the key vectors. int
+          value_vec_size: size of the value vectors. int
+        """
+        self.keep_prob = keep_prob
+        self.key_vec_size = key_vec_size
+        self.value_vec_size = value_vec_size
+
+    def build_graph(self, values, values_mask, keys, keys_mask):
+        """
+        Keys attend to values.
+        For each key, return an attention distribution and an attention output vector.
+
+        Inputs:
+          values: Tensor shape (batch_size, num_values, value_vec_size).
+          values_mask: Tensor shape (batch_size, num_values).
+            1s where there's real input, 0s where there's padding
+          keys: Tensor shape (batch_size, num_keys, value_vec_size)
+          keys_mask: Tensor shape (batch_size, num_keys).
+
+        Outputs:
+          attn_dist: Tensor shape (batch_size, num_keys, num_values).
+            For each key, the distribution should sum to 1,
+            and should be 0 in the value locations that correspond to padding.
+          output: Tensor shape (batch_size, num_keys, hidden_size).
+            This is the attention output; the weighted sum of the values
+            (using the attention distribution as weights).
+        """
+        with vs.variable_scope("CoAttn"):
+
+            # Calculate attention distribution
+            # Note : This assumes that the value_vec_size == key_vec_size
+            xi = tf.contrib.layers.xavier_initializer()
+            W = tf.get_variable("weights", shape=(self.value_vec_size, self.value_vec_size), dtype=tf.float32, initializer=xi)
+            b = tf.get_variable("bias", shape=(1, self.value_vec_size), dtype=tf.float32, initializer=tf.constant_initializer(0.0))
+            context_sentinel = tf.get_variable("context_sentinel", shape=(1, 1, self.key_vec_size), initializer=xi)
+            question_sentinel = tf.get_variable("question_sentinel", shape=(1, 1, self.value_vec_size), initializer=xi)
+            one = tf.constant(1, dtype=tf.int32, shape=(1,1))
+            
+            # shape = (batch_size, num_values, value_vec_size)
+            value_shape = values.get_shape()
+            value_dash = tf.tensordot(values, W, axes=1)
+            value_dash.set_shape(value_shape)
+            value_dash = tf.nn.tanh(value_dash + tf.expand_dims(b, axis=0))
+
+            # shape = (batch_size, num_keys + 1, key_vec_size)
+            new_context_state = tf.concat([keys, tf.tile(context_sentinel, tf.stack([tf.shape(keys)[0], 1, 1]))], axis=1)
+            updated_keys_mask = tf.concat([keys_mask, tf.tile(one, tf.stack([tf.shape(keys)[0], 1]))], axis=1)
+
+            # shape = (batch_size, num_values+1, value_vec_size)
+            new_question_state = tf.concat([values, tf.tile(question_sentinel, tf.stack([tf.shape(values)[0], 1, 1]))], axis=1)
+            updated_values_mask = tf.concat([values_mask, tf.tile(one, tf.stack([tf.shape(values)[0], 1]))], axis=1)
+
+            # shape = (batch_size, num_keys + 1, num_values + 1)
+            L_matrix = tf.matmul(new_context_state, tf.transpose(new_question_state, perm=[0,2,1]))
+            _, c2q_attn_dist = masked_softmax(L_matrix, tf.expand_dims(updated_values_mask, axis=1), 2)
+            
+            # shape = (batch_size, num_keys + 1, values_vec_size)
+            c2q_attn_output = tf.matmul(c2q_attn_dist, new_question_state)
+
+            # shape = (batch_size, num_values + 1, num_keys +1)
+            L_matrix_t = tf.transpose(L_matrix, perm=[0, 2, 1])
+            _, q2c_attn_dist = masked_softmax(L_matrix_t, tf.expand_dims(updated_keys_mask, axis=1), 2)            
+
+            # shape = (batch_size, num_values+1, key_vec_size)
+            q2c_attn_output = tf.matmul(q2c_attn_dist, new_context_state)
+
+            # shape = (batch_size, num_keys + 1, key_vec_size)
+            co_attention = tf.matmul(c2q_attn_dist, q2c_attn_output)
+
+            encoder = RNNEncoder(self.key_vec_size, self.keep_prob)
+            output = encoder.build_graph(tf.concat([co_attention[:,:-1,:], c2q_attn_output[:,:-1,:]], axis=2), keys_mask)
+
+            return c2q_attn_dist, output
 
 
 class BidafAttn(object):
