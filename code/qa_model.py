@@ -30,7 +30,7 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
-from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, CoAttn
+from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, CoAttn, BidafAttn
 from vocab import CHAR_PAD_ID
 
 logging.basicConfig(level=logging.INFO)
@@ -149,15 +149,20 @@ class QAModel(object):
         # Note: here the RNNEncoder is shared (i.e. the weights are the same)
         # between the context and the question.
         encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
-        context_hiddens = encoder.build_graph(tf.concat([self.context_char_embs, self.context_embs], axis=2), self.context_mask) # (batch_size, context_len, hidden_size*2)
-        question_hiddens = encoder.build_graph(tf.concat([self.qn_char_embs, self.qn_embs], axis=2), self.qn_mask) # (batch_size, question_len, hidden_size*2)
+        context_cnn = tf.layers.conv1d(self.context_char_embs, 100, 5, padding="same", activation=tf.nn.tanh, use_bias=True)
+        context_cnn_maxpool = tf.layers.max_pooling1d(context_cnn, pool_size=5, strides=1, padding="same")
+
+        context_hiddens = encoder.build_graph(tf.concat([self.context_embs, context_cnn_maxpool], axis=2), self.context_mask) # (batch_size, context_len, hidden_size*2)
+        qn_cnn = tf.layers.conv1d(self.qn_char_embs, 100, 5, padding="same")
+        qn_cnn_maxpool = tf.layers.max_pooling1d(qn_cnn, pool_size=5, strides=1, padding="same", activation=tf.nn.tanh, use_bias=True)
+        question_hiddens = encoder.build_graph(tf.concat([qn_cnn_maxpool, self.qn_embs], axis=2), self.qn_mask) # (batch_size, question_len, hidden_size*2)
 
         # Use context hidden states to attend to question hidden states
         attn_layer = CoAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2)
         _, attn_output = attn_layer.build_graph(question_hiddens, self.qn_mask, context_hiddens, self.context_mask) # attn_output is shape (batch_size, context_len, hidden_size*2)
 
         # Concat attn_output to context_hiddens to get blended_reps
-        blended_reps = tf.concat([context_hiddens, attn_output], axis=2) # (batch_size, context_len, hidden_size*4)
+        blended_reps = tf.concat([context_hiddens, attn_output], axis=2) # (batch_size, context_len, hidden_size*8)
 
         # Apply fully connected layer to each blended representation
         # Note, blended_reps_final corresponds to b' in the handout
