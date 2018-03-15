@@ -153,8 +153,8 @@ class QAModel(object):
         context_cnn_maxpool = tf.layers.max_pooling1d(context_cnn, pool_size=5, strides=1, padding="same")
 
         context_hiddens = encoder.build_graph(tf.concat([self.context_embs, context_cnn_maxpool], axis=2), self.context_mask) # (batch_size, context_len, hidden_size*2)
-        qn_cnn = tf.layers.conv1d(self.qn_char_embs, 100, 5, padding="same")
-        qn_cnn_maxpool = tf.layers.max_pooling1d(qn_cnn, pool_size=5, strides=1, padding="same", activation=tf.nn.tanh, use_bias=True)
+        qn_cnn = tf.layers.conv1d(self.qn_char_embs, 100, 5, padding="same", activation=tf.nn.tanh, use_bias=True)
+        qn_cnn_maxpool = tf.layers.max_pooling1d(qn_cnn, pool_size=5, strides=1, padding="same")
         question_hiddens = encoder.build_graph(tf.concat([qn_cnn_maxpool, self.qn_embs], axis=2), self.qn_mask) # (batch_size, question_len, hidden_size*2)
 
         # Use context hidden states to attend to question hidden states
