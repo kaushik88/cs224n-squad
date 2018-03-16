@@ -30,8 +30,12 @@ from tensorflow.python.ops import embedding_ops
 from evaluate import exact_match_score, f1_score
 from data_batcher import get_batch_generator
 from pretty_print import print_example
+<<<<<<< HEAD
 from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, CoAttn, BidafAttn
 from vocab import CHAR_PAD_ID
+=======
+from modules import RNNEncoder, SimpleSoftmaxLayer, BasicAttn, CoAttn, MultiRNNEncoder
+>>>>>>> mrnn
 
 logging.basicConfig(level=logging.INFO)
 
