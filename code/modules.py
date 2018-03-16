@@ -106,13 +106,13 @@ class MultiRNNEncoder(object):
         self.hidden_size = hidden_size
         self.keep_prob = keep_prob
         self.num_layers = num_layers
-        self.rnn_cell_fw = [rnn_cell.GRUCell(self.hidden_size) for _ in range(self.num_layers)]
+        self.rnn_cell_fw = [rnn_cell.LSTMCell(self.hidden_size) for _ in range(self.num_layers)]
         self.rnn_cell_fw = [DropoutWrapper(cell, input_keep_prob=self.keep_prob) for cell in self.rnn_cell_fw]
-        self.multi_rnn_cell_fw = rnn_cell.MultiRNNCell(self.rnn_cell_fw, state_is_tuple=False)
+        self.multi_rnn_cell_fw = rnn_cell.MultiRNNCell(self.rnn_cell_fw, state_is_tuple=True)
 
-        self.rnn_cell_bw = [rnn_cell.GRUCell(self.hidden_size) for _ in range(self.num_layers)]
+        self.rnn_cell_bw = [rnn_cell.LSTMCell(self.hidden_size) for _ in range(self.num_layers)]
         self.rnn_cell_bw = [DropoutWrapper(cell, input_keep_prob=self.keep_prob) for cell in self.rnn_cell_bw]
-        self.multi_rnn_cell_bw = rnn_cell.MultiRNNCell(self.rnn_cell_bw, state_is_tuple=False)
+        self.multi_rnn_cell_bw = rnn_cell.MultiRNNCell(self.rnn_cell_bw, state_is_tuple=True)
 
     def build_graph(self, inputs, masks):
         """
@@ -330,6 +330,54 @@ class CoAttn(object):
             output = encoder.build_graph(tf.concat([co_attention[:,:-1,:], c2q_attn_output[:,:-1,:]], axis=2), keys_mask)
 
             return c2q_attn_dist, output
+
+class LSTMSoftmaxLayer(object):
+    """
+    Module to take set of hidden states, (e.g. one for each context location),
+    and return probability distribution over those states.
+    """
+
+    def __init__(self, hidden_size, keep_prob):
+        self.hidden_size = hidden_size
+        self.keep_prob = keep_prob
+        self.rnn_cell_fw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_fw = DropoutWrapper(self.rnn_cell_fw, input_keep_prob=self.keep_prob)
+        self.rnn_cell_bw = rnn_cell.LSTMCell(self.hidden_size)
+        self.rnn_cell_bw = DropoutWrapper(self.rnn_cell_bw, input_keep_prob=self.keep_prob)
+
+    def build_graph(self, inputs, masks):
+        """
+        Applies one linear downprojection layer, then softmax.
+
+        Inputs:
+          inputs: Tensor shape (batch_size, seq_len, hidden_size)
+          masks: Tensor shape (batch_size, seq_len)
+            Has 1s where there is real input, 0s where there's padding.
+
+        Outputs:
+          logits: Tensor shape (batch_size, seq_len)
+            logits is the result of the downprojection layer, but it has -1e30
+            (i.e. very large negative number) in the padded locations
+          prob_dist: Tensor shape (batch_size, seq_len)
+            The result of taking softmax over logits.
+            This should have 0 in the padded locations, and the rest should sum to 1.
+        """
+        with vs.variable_scope("LSTMSoftmaxLayer"):
+
+            # Linear downprojection layer
+            # Note - This creates a 'weight' matrix W and initializes it to xavier and multiplies it with inputs
+            # and adds the bias and returns this as the logits.
+            input_lens = tf.reduce_sum(masks, reduction_indices=1)  # shape (batch_size)
+            (fw_out, bw_out), _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell_fw, self.rnn_cell_bw, inputs,
+                                                                  input_lens, dtype=tf.float32)
+            out = tf.concat([fw_out, bw_out], 2)
+            out = tf.nn.dropout(out, self.keep_prob)
+            logits = tf.contrib.layers.fully_connected(out, num_outputs=1, activation_fn=None) # shape (batch_size, seq_len, 1)
+            logits = tf.squeeze(logits, axis=[2]) # shape (batch_size, seq_len)
+            # Take softmax over sequence
+            masked_logits, prob_dist = masked_softmax(logits, masks, 1)
+
+            return masked_logits, prob_dist
 
 
 class BidafAttn(object):
