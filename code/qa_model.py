@@ -128,10 +128,10 @@ class QAModel(object):
 
             # shape = batch_size, context_len, word_len*char_embedding_size
             self.context_char_embs = tf.reshape(self.context_char_embs,
-                                                (-1, self.FLAGS.context_len,self.FLAGS.word_len * self.FLAGS.char_embedding_size))
+                                                (-1, self.FLAGS.word_len, self.FLAGS.char_embedding_size))
             self.qn_char_embs = embedding_ops.embedding_lookup(char_emb_matrix, self.qn_char_ids)
             self.qn_char_embs = tf.reshape(self.qn_char_embs,
-                                                (-1, self.FLAGS.question_len,self.FLAGS.word_len * self.FLAGS.char_embedding_size))
+                                                (-1, self.FLAGS.word_len, self.FLAGS.char_embedding_size))
 
 
     def build_graph(self):
@@ -149,13 +149,16 @@ class QAModel(object):
         # Note: here the RNNEncoder is shared (i.e. the weights are the same)
         # between the context and the question.
         encoder = RNNEncoder(self.FLAGS.hidden_size, self.keep_prob)
-        context_cnn = tf.layers.conv1d(self.context_char_embs, 100, 5, padding="same", activation=tf.nn.tanh, use_bias=True)
-        context_cnn_maxpool = tf.layers.max_pooling1d(context_cnn, pool_size=5, strides=1, padding="same")
+        context_cnn = tf.layers.conv1d(self.context_char_embs, 100, 5, activation=tf.nn.tanh, use_bias=True)
+        context_cnn_maxpool = tf.reduce_max(context_cnn, axis=1, keep_dims=True)
+        context_cnn_maxpool = tf.reshape(context_cnn_maxpool, (-1, self.FLAGS.context_len, 100))
+        
+        qn_cnn = tf.layers.conv1d(self.qn_char_embs, 100, 5, activation=tf.nn.tanh, use_bias=True)
+        qn_cnn_maxpool = tf.reduce_max(qn_cnn, axis=1, keep_dims=True)
+        qn_cnn_maxpool = tf.reshape(qn_cnn_maxpool, (-1, self.FLAGS.question_len, 100))
 
         context_hiddens = encoder.build_graph(tf.concat([self.context_embs, context_cnn_maxpool], axis=2), self.context_mask) # (batch_size, context_len, hidden_size*2)
-        qn_cnn = tf.layers.conv1d(self.qn_char_embs, 100, 5, padding="same", activation=tf.nn.tanh, use_bias=True)
-        qn_cnn_maxpool = tf.layers.max_pooling1d(qn_cnn, pool_size=5, strides=1, padding="same")
-        question_hiddens = encoder.build_graph(tf.concat([qn_cnn_maxpool, self.qn_embs], axis=2), self.qn_mask) # (batch_size, question_len, hidden_size*2)
+        question_hiddens = encoder.build_graph(tf.concat([self.qn_embs, qn_cnn_maxpool], axis=2), self.qn_mask) # (batch_size, question_len, hidden_size*2)
 
         # Use context hidden states to attend to question hidden states
         attn_layer = CoAttn(self.keep_prob, self.FLAGS.hidden_size*2, self.FLAGS.hidden_size*2)
