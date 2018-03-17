@@ -5,38 +5,19 @@
 %\documentstyle[nips13submit_09,times,art10]{article} % For LaTeX 2.09
 
 
-\title{Formatting Instructions for NIPS 2013}
+\title{Question Answering System using Attention models}
 
 
 \author{
-David S.~Hippocampus\thanks{ Use footnote for providing further information
-about author (webpage, alternative address)---\emph{not} for acknowledging
-funding agencies.} \\
-Department of Computer Science\\
-Cranberry-Lemon University\\
-Pittsburgh, PA 15213 \\
-\texttt{hippo@cs.cranberry-lemon.edu} \\
+Kaushik Rangadurai\\
+Software Engineer\\
+Passage AI\\
+\texttt{kaushikr@stanford.edu} \\
 \And
-Coauthor \\
-Affiliation \\
-Address \\
-\texttt{email} \\
-\AND
-Coauthor \\
-Affiliation \\
-Address \\
-\texttt{email} \\
-\And
-Coauthor \\
-Affiliation \\
-Address \\
-\texttt{email} \\
-\And
-Coauthor \\
-Affiliation \\
-Address \\
-\texttt{email} \\
-(if needed)\\
+Poorva Potdar \\
+Software Engineer \\
+Google.Inc \\
+\texttt{poorvah@stanford.edu} \\
 }
 
 % The \author macro works with any number of authors. There are two commands
@@ -58,14 +39,27 @@ Address \\
 \maketitle
 
 \begin{abstract}
-The abstract paragraph should be indented 1/2~inch (3~picas) on both left and
-right-hand margins. Use 10~point type, with a vertical spacing of 11~points.
-The word \textbf{Abstract} must be centered, bold, and in point size 12. Two
-line spaces precede the abstract. The abstract must be limited to one
-paragraph.
+In this paper, we have implemented and evaluation various attention mechanisms
+like Multiplicative Attention, Bahdanau Attention, Bidirectional Attention[1], Self-Attention[2]
+and Co-Attention[3]. We have also incorporated character embeddings in addition to the existing
+GloVe embeddings provided in the starter code. Our best performing model was able to get 
+an EM of {\color{red}XX} and F1 of {\color{red}YY} on the test set.
 \end{abstract}
 
-\section{Submission of papers to NIPS 2013}
+\section{Introduction}
+
+Machine Comprehension (MC) is defined as answering a query, with a given paragraph in context. 
+Efficient solutions for machine comprehension require capturing the interaction between question and paragraphs. 
+There is tons of cutting-edge research in this machine comprehension and companies like Google, Amazon are already 
+productionizing modeling techniques to better capture these relationships for building google assistant and echo.
+In this paper,  we have implemented and evaluated a few machine comprehension techniques and have described our best performing model.
+For this project, we used Stanford Question Answering Dataset (SQuAD); which has question-answer pairs along with a context paragraph for every pair.
+
+The rest of the paper is organized as follows : section 2 describes the problem;
+ section 3 describes the various techniques we tried and corresponding results;
+ section 4 describes our best performing model. In section 5, we analyze the results and different
+ types of errors and section 6 describes future direction.
+
 
 NIPS requires electronic submissions.  The electronic submission site is  
 \begin{center}
@@ -74,108 +68,6 @@ NIPS requires electronic submissions.  The electronic submission site is
 
 Please read carefully the
 instructions below, and follow them faithfully.
-\subsection{Style}
-
-Papers to be submitted to NIPS 2013 must be prepared according to the
-instructions presented here. Papers may be only up to eight pages long,
-including figures. Since 2009 an additional ninth page \textit{containing only
-cited references} is allowed. Papers that exceed nine pages will not be
-reviewed, or in any other way considered for presentation at the conference.
-%This is a strict upper bound. 
-
-Please note that this year we have introduced automatic line number generation
-into the style file (for \LaTeXe and Word versions). This is to help reviewers
-refer to specific lines of the paper when they make their comments. Please do
-NOT refer to these line numbers in your paper as they will be removed from the
-style file for the final version of accepted papers.
-
-The margins in 2013 are the same as since 2007, which allow for $\approx 15\%$
-more words in the paper compared to earlier years. We are also again using 
-double-blind reviewing. Both of these require the use of new style files.
-
-Authors are required to use the NIPS \LaTeX{} style files obtainable at the
-NIPS website as indicated below. Please make sure you use the current files and
-not previous versions. Tweaking the style files may be grounds for rejection.
-
-%% \subsection{Double-blind reviewing}
-
-%% This year we are doing double-blind reviewing: the reviewers will not know 
-%% who the authors of the paper are. For submission, the NIPS style file will 
-%% automatically anonymize the author list at the beginning of the paper.
-
-%% Please write your paper in such a way to preserve anonymity. Refer to
-%% previous work by the author(s) in the third person, rather than first
-%% person. Do not provide Web links to supporting material at an identifiable
-%% web site.
-
-%%\subsection{Electronic submission}
-%%
-%% \textbf{THE SUBMISSION DEADLINE IS MAY 31st, 2013. SUBMISSIONS MUST BE LOGGED BY
-%% 23:00, MAY 31st, 2013, UNIVERSAL TIME}
-
-%% You must enter your submission in the electronic submission form available at
-%% the NIPS website listed above. You will be asked to enter paper title, name of
-%% all authors, keyword(s), and data about the contact
-%% author (name, full address, telephone, fax, and email). You will need to
-%% upload an electronic (postscript or pdf) version of your paper.
-
-%% You can upload more than one version of your paper, until the
-%% submission deadline. We strongly recommended uploading your paper in
-%% advance of the deadline, so you can avoid last-minute server congestion.
-%%
-%% Note that your submission is only valid if you get an e-mail
-%% confirmation from the server. If you do not get such an e-mail, please
-%% try uploading again. 
-
-
-\subsection{Retrieval of style files}
-
-The style files for NIPS and other conference information are available on the World Wide Web at
-\begin{center}
-   \url{http://www.nips.cc/}
-\end{center}
-The file \verb+nips2013.pdf+ contains these 
-instructions and illustrates the
-various formatting requirements your NIPS paper must satisfy. \LaTeX{}
-users can choose between two style files:
-\verb+nips11submit_09.sty+ (to be used with \LaTeX{} version 2.09) and
-\verb+nips11submit_e.sty+ (to be used with \LaTeX{}2e). The file
-\verb+nips2013.tex+ may be used as a ``shell'' for writing your paper. All you
-have to do is replace the author, title, abstract, and text of the paper with
-your own. The file
-\verb+nips2013.rtf+ is provided as a shell for MS Word users.
-
-The formatting instructions contained in these style files are summarized in
-sections \ref{gen_inst}, \ref{headings}, and \ref{others} below.
-
-%% \subsection{Keywords for paper submission}
-%% Your NIPS paper can be submitted with any of the following keywords (more than one keyword is possible for each paper):
-
-%% \begin{verbatim}
-%% Bioinformatics
-%% Biological Vision
-%% Brain Imaging and Brain Computer Interfacing
-%% Clustering
-%% Cognitive Science
-%% Control and Reinforcement Learning
-%% Dimensionality Reduction and Manifolds
-%% Feature Selection
-%% Gaussian Processes
-%% Graphical Models
-%% Hardware Technologies
-%% Kernels
-%% Learning Theory
-%% Machine Vision
-%% Margins and Boosting
-%% Neural Networks
-%% Neuroscience
-%% Other Algorithms and Architectures
-%% Other Applications
-%% Semi-supervised Learning
-%% Speech and Signal Processing
-%% Text and Language Applications
-
-%% \end{verbatim}
 
 \section{General formatting instructions}
 \label{gen_inst}
