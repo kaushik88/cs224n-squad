@@ -49,7 +49,7 @@ def tokens_to_ids(tokens, word2id):
     ids = [word2id.get(w, UNK_ID) for w in tokens]
     return ids, char_ids
 
-def flatten_char_ids(char_id, word_len, sequence_len):
+def flatten_char_ids(char_ids, word_len, sequence_len):
     for char_id in char_ids :
         if len(char_id) > word_len:
             char_id = char_id[:word_len]
