@@ -53,12 +53,12 @@ def flatten_char_ids(char_ids, word_len, sequence_len):
     for char_id in char_ids :
         if len(char_id) > word_len:
             char_id = char_id[:word_len]
-        if len(context_char_id) < word_len :
+        if len(char_id) < word_len :
             char_id.extend([CHAR_PAD_ID] * (word_len - len(char_id)))
     char_ids_flat = [item for sublist in char_ids for item in sublist]
     char_len = sequence_len * word_len
     if len(char_ids_flat) > char_len:
-        context_char_ids_flat = context_char_ids_flat[:char_len]
+        char_ids_flat = char_ids_flat[:char_len]
     return char_ids_flat
 
 
