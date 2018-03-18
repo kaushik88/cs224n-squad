@@ -120,7 +120,7 @@ class QAModel(object):
             self.qn_embs = embedding_ops.embedding_lookup(embedding_matrix, self.qn_ids) # shape (batch_size, question_len, embedding_size)
 
             char_emb_matrix = tf.get_variable(name="char_emb_matrix",
-                                              shape=[CHAR_PAD_ID +  2, self.FLAGS.char_embedding_size],
+                                              shape=[CHAR_PAD_ID +  1, self.FLAGS.char_embedding_size],
                                               initializer=tf.contrib.layers.xavier_initializer())
 
             # shape : batch_size , self.FLAGS.context_len * self.FLAGS.word_len, char_embedding_size

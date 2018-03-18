@@ -80,7 +80,7 @@ def sentence_to_token_ids(sentence, word2id):
     char_ids = []
     tokens = split_by_whitespace(sentence) # list of strings
     for word in tokens :
-        char_ids.append([ALPHABET.find(char) if char in ALPHABET else CHAR_UNK_ID for char in word])
+        char_ids.append([ALPHABET.index(char) if char in ALPHABET else CHAR_UNK_ID for char in word])
     ids = [word2id.get(w, UNK_ID) for w in tokens]
     return tokens, ids, char_ids
 

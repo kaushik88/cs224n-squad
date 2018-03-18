@@ -45,7 +45,7 @@ def tokens_to_ids(tokens, word2id):
     """
     char_ids = []
     for word in tokens :
-        char_ids.append([ALPHABET.find(char) if char in ALPHABET else CHAR_UNK_ID for char in word])
+        char_ids.append([ALPHABET.index(char) if char in ALPHABET else CHAR_UNK_ID for char in word])
     ids = [word2id.get(w, UNK_ID) for w in tokens]
     return ids, char_ids
 
