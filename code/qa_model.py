@@ -329,8 +329,8 @@ class QAModel(object):
         # Get start_dist and end_dist, both shape (batch_size, context_len)
         start_dist, end_dist = self.get_prob_dists(session, batch)
 
-        start_pos = np.zeros(start_dist.shape[0])
-        end_pos = np.zeros(start_dist.shape[0])
+        start_pos = np.zeros(start_dist.shape[0], dtype=int)
+        end_pos = np.zeros(start_dist.shape[0], dtype=int)
         
         for x in range(0, start_dist.shape[0]):
             max_prod = 0
