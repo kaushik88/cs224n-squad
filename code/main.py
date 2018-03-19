@@ -49,11 +49,13 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm
 tf.app.flags.DEFINE_float("dropout", 0.15, "Fraction of units randomly dropped on non-recurrent connections.")
 tf.app.flags.DEFINE_integer("batch_size", 100, "Batch size to use")
 tf.app.flags.DEFINE_integer("hidden_size", 200, "Size of the hidden states")
+tf.app.flags.DEFINE_integer("multi_hidden_size", 100, "Size of the hidden states")
 tf.app.flags.DEFINE_integer("context_len", 600, "The maximum context length of your model")
 tf.app.flags.DEFINE_integer("question_len", 30, "The maximum question length of your model")
 tf.app.flags.DEFINE_integer("embedding_size", 100, "Size of the pretrained word vectors. This needs to be one of the available GloVe dimensions: 50/100/200/300")
 tf.app.flags.DEFINE_integer("word_len", 16, "Maximum word size in vocab")
 tf.app.flags.DEFINE_integer("char_embedding_size", 20, "Embedding size of char matrix")
+tf.app.flags.DEFINE_integer("num_layers", 2, "Number of layers")
 
 # How often to print, save, eval
 tf.app.flags.DEFINE_integer("print_every", 1, "How many iterations to do per print.")
