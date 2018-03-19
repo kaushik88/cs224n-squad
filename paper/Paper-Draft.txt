@@ -1,0 +1,104 @@
+**Abstract**
+
+In this paper, we have implemented and evaluated various attention mechanisms like Bahdanau Attention, Bidirectional Attention[1], Self-Attention[2] and Co-Attention[3]. We have also incorporated character embeddings in addition to the existing GloVe embeddings provided in the starter code and used a Convolutional Neural Network (CNN) on top of the character embeddings. Our best performing model was able to get an EM of {\color{red}XX} and F1 of {\color{red}YY} on the test set.
+
+**Introduction**
+
+Most of the Natural Language Processing (NLP) problems can be seen as a question-answering problem. For example, a Search Engine (traditionally an Information Retrieval (IR) problem) can be seen as a Question-Answering problem - where the user typed query is the 'question', the document or a passage in a document is the answer. In fact, search engines like Google and Bing have recently introduced \textbf{answers} (a passage from the document) in the result page instead of just have document links. With the rise of personal assistants like Amazon Echo and Google Home and various chat-bots, the question answering system has become an important real-world problem to solve. From an end-user point of view, it gives a perception that a computer or a machine can not only understand humans but can also converse with them in natural language. To motivate this line of research, Stanford NLP group released the SQUAD[1] dataset, which consists of 100K question-answer pairs, along with a context paragraph for each pair.
+
+The rest of the paper is organized as follows - section 2 defines the problem formally and section 3 analyzes the Squad dataset. Section 4 explains our model architecture by going over the math and in section 5, we go over some of the implementation details in Tensorflow. In section 6, we go over some of the ideas we wanted to implement but didn't due to the lack of time.
+
+**Problem Definition**
+
+**Model**
+
+Our model is inspired from the architecture diagram in the Bidirectional Attention Flow (BiDaF) paper. Below is the architecture from the paper - 
+
+<Insert BiDaF paper>
+
+1. Character Embedding - The character embedding layer maps each word to a higher dimensional space using a character level CNN. The characters are represented in a higher dimensional space and this is passed through a 1d CNN which is then max-pooled over the width to give the character embeddings.
+
+2. Word Embedding - We have used the word embeddings from GloVe. The embeddings were produced from a training dataset of 6 Billion tokens (Wikipedia and Gigaword) and has 400K unique words. We used the 100 dimensional word vectors for this paper.
+
+3. Sequence 2 Sequence Layer - The character embedding and the word embeddings are then concatenated and then passed to a Sequence to Sequence (Seq2Seq) model. This is a 1 layer Bidirectional LSTM model where the question is the encoder and the passage or context is the decoder. The hidden states from the forward pass and the backward pass are then concatenated and dropout is applied to avoid over-fitting.
+
+4. Attention Layer - After the Seq2Seq layer, we implemented various attention mechanisms. The starter code that was provided to us included the Basic Attention - a dot product of the hidden states of the encoder and the decoder to calculate the similarity. We also tried using the Multiplicative Attention, the Additive Attention, Bi-directional attention flow, Self-Attention and Co-Attention. As Co-Attention was the best performing model for us, we continued more experiments with Co-Attention. 
+
+5. Modeling Layer - For the modeling layer, we used a simple fully-connected layer with ReLU non-linearity.
+
+6. Output Layer - For the output layer, we used a simple softmax layer to calculate the logits.
+
+7. Prediction - For the prediction, we used Dynamic Programming to calculate the maximum product of the probabilities of the start and end such that the index of the start is less than or equal to the index of the end.
+
+**Dataset**
+
+The training dataset consists of 100k question-answer pairs. Here are some analysis from the dataset. The training dataset consists of 97K unique words, out of which 25k of them were not present in the GloVe vocabulary. This gave us the intuition to explore character embeddings and that it could perform better than a simple word embedding. There were a total of 174 unique characters in the dataset. Due to memory constraints, we picked the 70 most-frequent characters from the vocabulary and used this as our character vocabulary for the character embeddings.
+
+<Insert 4 plots for the length of the context and question in train and dev set>
+
+From the above plots, we found that 99.99% of the contexts had a length of XXX or below and 99.99% of the questions had a length of YYY or below. Although we tried using the max length of the context and the question, due to memory constraints and faster iteration, we stuck to 99.99 percentile.
+
+<Insert 2 plots for the position of start and end>
+
+We found that a lot of the start position of the answer was the beginning of the context and similarly a lot of the end position of the answer was the end of the context. This also led us to force a certain width between the start position and end position during prediction.
+
+**Implementation Details**
+
+This section lists the various hyper-parameters in our model. We had used a maximum word length of 16, a character embedding size of 20 and GloVe word embedding size of 100. We used a CNN with a window width of 5 and an output layer size of 100. For the Seq2Seq layer, the context was trimmed to a length of 600 words, the questions were were trimmed to a length of 30 words and the size of the hidden layer is 200.
+
+**Results and Analysis**
+
+<Insert Table here>
+
+We analyzed some examples of predicted answers by the model and below are some problems observed.
+
+* Incorrect boundaries :
+Our model has a tendency to predict longer answers. Here is an example, 
+
+QUESTION: when forces are acting on an extended body , what do you need to account for motion effects ?
+TRUE ANSWER: respective lines of application
+PREDICTED ANSWER: their respective lines of application must also be specified in order
+
+Although the predicted answer includes the expected answer, there are additional words in context that are included as well. We tried to alleviate this problem by trying to predict the answer end index to be within a window of size 'K'.
+We incorporated this in the prediction.
+
+* Redundant words with the question:
+Our model has a tendency to predict answers that have redundant words with the question. For example, below, the predicted answers could very well ignore the phrases like "per year" or "in general".
+
+QUESTION: what did itv increase their yearly offer for control of the rights to broadcast the primer league to ?
+TRUE ANSWER: £34m
+PREDICTED ANSWER: £34m per year
+
+QUESTION: besides the study of prime numbers , what general theory was considered the official example of pure mathematics ?
+TRUE ANSWER: number theory
+PREDICTED ANSWER: number theory in general
+
+* Attention does not distribute weights correctly:
+Sometimes, our models weighs certain parts of the context over the other, and ends up giving completely wrong answer.
+In the example below, the attention layer should have picked "chen 's theorem", as we have C2Q and Q2C attentions. However, the model completely ignored the question.
+
+We observed this problem, mostly for longer context > 150.
+
+in addition to the riemann hypothesis , many more conjectures revolving about primes have been posed . often having an elementary formulation , many of these conjectures have withst
+ood a proof for decades : all four of landau 's problems from 1912 are still unsolved . one of them is goldbach 's conjecture , which asserts that every even integer
+n greater than 2 can be written as a sum of two primes . as of february 2011 [ update ] , this conjecture has been verified for all numbers up to n = 2 · 1017 . weaker statements t
+han this have been proven , for example vinogradov 's theorem says that every sufficiently large odd integer can be written as a sum of three primes . chen 's theorem says that every sufficiently large even number can be expressed as the sum of a prime and a semiprime , the product of two primes . also , any even integ
+er can be written as the sum of six primes . the branch of number theory studying such questions is called additive number theory .
+QUESTION: which theorem states that every large even integer can be written as a prime summed with a semiprime ?
+TRUE ANSWER: chen 's theorem
+PREDICTED ANSWER: goldbach 's conjecture
+
+* Human responses :
+Many times, our model does a good job at predicting the answer, but it does not match the human responses.
+
+QUESTION: what division offers more then one branch of studies that do n't fit in with the other four ?
+TRUE ANSWER: the new collegiate division
+PREDICTED ANSWER: new collegiate division
+
+
+
+
+
+**Discussion and Conclusion**
+
+

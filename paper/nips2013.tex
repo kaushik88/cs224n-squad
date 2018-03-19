@@ -2,10 +2,25 @@
 \usepackage{nips13submit_e,times}
 \usepackage{hyperref}
 \usepackage{url}
+\usepackage[pdftex]{graphicx}
+\usepackage{xcolor,colortbl}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{xspace}
+\DeclareMathOperator*{\softmax}{softmax}
+\DeclareMathOperator*{\LSTM}{LSTM}
+\DeclareMathOperator*{\BiLSTM}{Bi-LSTM}
+\DeclareMathOperator*{\HMN}{HMN}
+\DeclareMathOperator*{\argmax}{argmax}
 %\documentstyle[nips13submit_09,times,art10]{article} % For LaTeX 2.09
+\newcommand{\dhid}{\ell}
+\newcommand{\doclen}{m}
+\newcommand{\queslen}{n}
+\newcommand{\real}[1]{\mathbb{R}^{#1}}
+\newcommand{\transpose}[1]{#1^{\top}}
 
-
-\title{Question Answering System using Attention models}
+\title{Question Answering System}
 
 
 \author{
@@ -16,17 +31,9 @@ Passage AI\\
 \And
 Poorva Potdar \\
 Software Engineer \\
-Google.Inc \\
+Google Inc. \\
 \texttt{poorvah@stanford.edu} \\
 }
-
-% The \author macro works with any number of authors. There are two commands
-% used to separate the names and addresses of multiple authors: \And and \AND.
-%
-% Using \And between authors leaves it to \LaTeX{} to determine where to break
-% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
-% puts 3 of 4 authors names on the first line, and the last on the second
-% line, try using \AND instead of \And before the third author name.
 
 \newcommand{\fix}{\marginpar{FIX}}
 \newcommand{\new}{\marginpar{NEW}}
@@ -35,313 +42,241 @@ Google.Inc \\
 
 \begin{document}
 
-
 \maketitle
 
 \begin{abstract}
-In this paper, we have implemented and evaluation various attention mechanisms
-like Multiplicative Attention, Bahdanau Attention, Bidirectional Attention[1], Self-Attention[2]
-and Co-Attention[3]. We have also incorporated character embeddings in addition to the existing
-GloVe embeddings provided in the starter code. Our best performing model was able to get 
-an EM of {\color{red}XX} and F1 of {\color{red}YY} on the test set.
+In this paper, we have implemented and evaluated various attention mechanisms like Bidirectional Attention[1], Self-Attention[2] and Co-Attention[3]. We have also incorporated character embeddings in addition to the existing GloVe embeddings provided in the starter code and used a 1-dimensional Convolutional Neural Network (CNN) on top of the character embeddings. Our best performing model was able to get an EM of {\color{red}XX} and F1 of {\color{red}YY} on the test set.
 \end{abstract}
 
 \section{Introduction}
 
-Machine Comprehension (MC) is defined as answering a query, with a given paragraph in context. 
-Efficient solutions for machine comprehension require capturing the interaction between question and paragraphs. 
-There is tons of cutting-edge research in this machine comprehension and companies like Google, Amazon are already 
-productionizing modeling techniques to better capture these relationships for building google assistant and echo.
-In this paper,  we have implemented and evaluated a few machine comprehension techniques and have described our best performing model.
-For this project, we used Stanford Question Answering Dataset (SQuAD); which has question-answer pairs along with a context paragraph for every pair.
+Most of the Natural Language Processing (NLP) problems can be seen as a question-answering problem. For example, a Search Engine (traditionally an Information Retrieval (IR) problem) can be seen as a Question-Answering problem - where the user typed query is the 'question', the document or a passage in a document is the answer. In fact, search engines like Google and Bing have recently introduced \textbf{answers} (a passage from the document) in the result page instead of just have document links. With the rise of personal assistants like Amazon Echo and Google Home and various chat-bots, the question answering system has become an important real-world problem to solve. From an end-user point of view, it gives a perception that a computer or a machine can not only understand humans but can also converse with them in natural language. To motivate this line of research, Stanford NLP group released the SQUAD[1] dataset, which consists of 100K question-answer pairs, along with a context paragraph for each pair.
 
-The rest of the paper is organized as follows : section 2 describes the problem;
- section 3 describes the various techniques we tried and corresponding results;
- section 4 describes our best performing model. In section 5, we analyze the results and different
- types of errors and section 6 describes future direction.
+The rest of the paper is organized as follows - section 2 defines the problem formally and section 3 analyzes the Squad dataset. Section 4 explains our model architecture by going over the math and in section 5, we go over some of the implementation details in Tensorflow. In section 6, we go over some of the ideas we wanted to implement but didn't due to the lack of time.
 
+\section{Problem Definition}
+\label{problem}
 
-NIPS requires electronic submissions.  The electronic submission site is  
-\begin{center}
-   \url{http://papers.nips.cc}
-\end{center}
+SQuAD is a reading comprehension dataset. This means that we will be given a paragraph and a question about that paragraph, as input. The goal is to answer the question correctly. For example, consider the following passage - 
 
-Please read carefully the
-instructions below, and follow them faithfully.
+\fbox{ 
+  \parbox{\textwidth}{%
+     \textbf{Question} Who proved that air is necessary for combustion? \\
+      \textbf{Passage} In the late 17th century, Robert Boyle proved that air is necessary for combustion. English chemist John Mayow (1641?1679) refined this work by showing that fire requires only a part of air that he called spiritus 					nitroaereus or just nitroaereus. In one experiment he found that placing either a mouse or a lit candle in a closed container over water caused the water to rise and replace one-fourteenth of the air's volume before 				extinguishing the subjects. From this he surmised that nitroaereus is consumed in both respiration and combustion. \\
+      \textbf{Answer} Robert Boyle \\
+  }% 
+}
 
-\section{General formatting instructions}
-\label{gen_inst}
+It is important to note that for the SQuAD dataset, we don't have to generate text - we just need to point to the subtext of the passage that would contain the answer. As for metrics, we'll be looking at F1 and EM (Exact Match) to judge our answers. We'll look at them in detail in the section 6.
 
-The text must be confined within a rectangle 5.5~inches (33~picas) wide and
-9~inches (54~picas) long. The left margin is 1.5~inch (9~picas).
-Use 10~point type with a vertical spacing of 11~points. Times New Roman is the
-preferred typeface throughout. Paragraphs are separated by 1/2~line space,
-with no indentation.
+\section{Model}
+\label{model}
 
-Paper title is 17~point, initial caps/lower case, bold, centered between
-2~horizontal rules. Top rule is 4~points thick and bottom rule is 1~point
-thick. Allow 1/4~inch space above and below title to rules. All pages should
-start at 1~inch (6~picas) from the top of the page.
-
-%The version of the paper submitted for review should have ``Anonymous Author(s)'' as the author of the paper.
-
-For the final version, authors' names are
-set in boldface, and each name is centered above the corresponding
-address. The lead author's name is to be listed first (left-most), and
-the co-authors' names (if different address) are set to follow. If
-there is only one co-author, list both author and co-author side by side.
-
-Please pay special attention to the instructions in section \ref{others}
-regarding figures, tables, acknowledgments, and references.
-
-\section{Headings: first level}
-\label{headings}
-
-First level headings are lower case (except for first word and proper nouns),
-flush left, bold and in point size 12. One line space before the first level
-heading and 1/2~line space after the first level heading.
-
-\subsection{Headings: second level}
-
-Second level headings are lower case (except for first word and proper nouns),
-flush left, bold and in point size 10. One line space before the second level
-heading and 1/2~line space after the second level heading.
-
-\subsubsection{Headings: third level}
-
-Third level headings are lower case (except for first word and proper nouns),
-flush left, bold and in point size 10. One line space before the third level
-heading and 1/2~line space after the third level heading.
-
-\section{Citations, figures, tables, references}
-\label{others}
-
-These instructions apply to everyone, regardless of the formatter being used.
-
-\subsection{Citations within the text}
-
-Citations within the text should be numbered consecutively. The corresponding
-number is to appear enclosed in square brackets, such as [1] or [2]-[5]. The
-corresponding references are to be listed in the same order at the end of the
-paper, in the \textbf{References} section. (Note: the standard
-\textsc{Bib\TeX} style \texttt{unsrt} produces this.) As to the format of the
-references themselves, any style is acceptable as long as it is used
-consistently.
-
-As submission is double blind, refer to your own published work in the 
-third person. That is, use ``In the previous work of Jones et al.\ [4]'',
-not ``In our previous work [4]''. If you cite your other papers that
-are not widely available (e.g.\ a journal paper under review), use
-anonymous author names in the citation, e.g.\ an author of the
-form ``A.\ Anonymous''. 
-
-
-\subsection{Footnotes}
-
-Indicate footnotes with a number\footnote{Sample of the first footnote} in the
-text. Place the footnotes at the bottom of the page on which they appear.
-Precede the footnote with a horizontal rule of 2~inches
-(12~picas).\footnote{Sample of the second footnote}
-
-\subsection{Figures}
-
-All artwork must be neat, clean, and legible. Lines should be dark
-enough for purposes of reproduction; art work should not be
-hand-drawn. The figure number and caption always appear after the
-figure. Place one line space before the figure caption, and one line
-space after the figure. The figure caption is lower case (except for
-first word and proper nouns); figures are numbered consecutively.
-
-Make sure the figure caption does not get separated from the figure.
-Leave sufficient space to avoid splitting the figure and figure caption.
-
-You may use color figures. 
-However, it is best for the
-figure captions and the paper body to make sense if the paper is printed
-either in black/white or in color.
-\begin{figure}[h]
-\begin{center}
-%\framebox[4.0in]{$\;$}
-\fbox{\rule[-.5cm]{0cm}{4cm} \rule[-.5cm]{4cm}{0cm}}
-\end{center}
-\caption{Sample figure caption.}
+\begin{figure}[t]
+\centering
+\includegraphics[width=34pc]{figures/model}
+\caption{\small Our Model Architecture\space\space}
+\label{fig:model}
 \end{figure}
 
-\subsection{Tables}
+The architecture is split into the following layers - 
 
-All tables must be centered, neat, clean and legible. Do not use hand-drawn
-tables. The table number and title always appear before the table. See
-Table~\ref{sample-table}.
+\begin{enumerate}
+  \item \textbf{Character Embedding} - The character embedding layer maps each word to a higher dimensional space using a character level CNN. The characters are represented in a higher dimensional space and this is passed through a 1d CNN which is then max-pooled over the width to give the character embeddings.
+  \item \textbf{Word Embedding} - We have used the word embeddings from GloVe. The embeddings were produced from a training dataset of 6 Billion tokens (Wikipedia and Gigaword) and has 400K unique words. We used the 100 dimensional word vectors for this paper.
+  \item \textbf{Sequence 2 Sequence Layer} - The character embedding and the word embeddings are then concatenated and then passed to a Sequence to Sequence (Seq2Seq) model. This is a 1 layer Bidirectional LSTM model where the question is the encoder and the passage or context is the decoder. The hidden states from the forward pass and the backward pass are then concatenated and dropout is applied to avoid over-fitting.
+  \item \textbf{Attention Layer} - After the Seq2Seq layer, we implemented various attention mechanisms. The starter code that was provided to us included the Basic Attention - a dot product of the hidden states of the encoder and the decoder to calculate the similarity. We also tried using the Multiplicative Attention, the Additive Attention, Bi-directional attention flow, Self-Attention and Co-Attention. As Co-Attention was the best performing model for us, we continued more experiments with Co-Attention.
+  \item \textbf{Modeling Layer} - For the modeling layer, we used a simple fully-connected layer with ReLU non-linearity.
+  \item \textbf{Output Layer} - For the output layer, we used a simple softmax layer to calculate the logits.
+  \item \textbf{Prediction} - For the prediction, we used Dynamic Programming to calculate the maximum product of the probabilities of the start and end such that the index of the start is less than or equal to the index of the end.
+\end{enumerate}
 
-Place one line space before the table title, one line space after the table
-title, and one line space after the table. The table title must be lower case
-(except for first word and proper nouns); tables are numbered consecutively.
+Below, we'll explain the theory behind Co-Attention - 
+
+The Co-Attention network gets the inputs from the outputs of the Seq2Seq network which are both of dimenstions 2H where H is the dimension of the hidden layer. Assume that we've context hidden states $c_1...c_N \in \real{2H}$ and question hidden states $q_1...q_M \in \real{2H}$. From the hidden states of the question, we obtain a project question hidden states by applying a linear layer and tanh non-linearity.
+
+\begin{center} $q_j^\prime = \tanh ( Wq_j + b ) \in \real{2H} \forall j \in \{1,...,M\} $. \end{center}
+
+We now add a sentinel vector to both the context and question hidden states. We then compute the affinity matrix, which contains affinity scores corresponding to all pairs of document words and question words.
+
+\begin{center} $L = \transpose{c_i} q_j^\prime \in \real{(n + 1) \times (m + 1)}$. \end{center}
+
+We now use the affinity matrix to compute the attention in both the directions. The Context 2 Question attention (C2Q) \textbf{$a_i$} is calculated by :
+
+\begin{center} $ \alpha^i = \softmax (L_{i:}) \in \real {(M+1)}$  \end{center}
+
+\begin{center} $a_i = \sum_{j=1}^{M+1} \alpha_j^iq_j^\prime \in \real{2H}$  \end{center}
+
+For the Q2C attention, we obtain the attention outputs \textbf{$b_j$} by - 
+
+
+\begin{center} $\beta^j = \softmax (L_{:j}) \in \real {(N+1)}$  \end{center}
+
+\begin{center} $b_j = \sum_{i=1}^{N+1} \beta_i^jc_i^\prime \in \real{2H}$  \end{center}
+
+Next, we use the C2Q attention distributions $\alpha_i$ to take weighted sums of the Q2C attention outputs \textbf{$b_j$}. This gives us second-level attention outputs $s_i$ -
+
+\begin{center} $s_i = \sum_{j=1}^{M+1} \alpha^i_j \beta_j \in \real{2H}$  \end{center}
+
+Finally, we concatenate the second-level attention outputs $s_i$ with the first-level C2Q attention outputs $a_i$, and feed the sequence through a bidirectional LSTM. The resulting hidden states $u_i$ of this biLSTM are known as the coattention encoding. This is the overall output of the Coattention Layer.
+
+\begin{center} $\{u_1, . . . ,u_N \} = biLSTM({[s_1; a_1], . . . , [s_N ; a_N ]})$  \end{center}
+
+\section{Dataset}
+
+The training dataset consists of 100k question-answer pairs with 97,554 unique words out of which 25,969 of them were not present in the GloVe vocabulary. Some of the most frequent words not present in the GloVe vocabulary were  'midna', 'asphalt/bitumen', 'pro-tibet', 'ganondorf' and other UTF-8 encoded words. This gave us the intuition to explore character embeddings and that it could perform better than a simple word embedding. There were a total of 174 unique characters in the dataset. Due to memory constraints, we picked the 70 most-frequent characters from the vocabulary and used this as our character vocabulary for the character embeddings. The remaining 70 characters characters were UTF-8 encoded.
 
 \begin{table}[t]
-\caption{Sample table title}
-\label{sample-table}
+\caption{Performance Comparison}
+\label{performance-table}
 \begin{center}
 \begin{tabular}{ll}
-\multicolumn{1}{c}{\bf PART}  &\multicolumn{1}{c}{\bf DESCRIPTION}
+\multicolumn{1}{c}{\bf Type of Question}  &\multicolumn{1}{c}{\bf Count}
 \\ \hline \\
-Dendrite         &Input terminal \\
-Axon             &Output terminal \\
-Soma             &Cell body (contains cell nucleus) \\
+How	&10015 \\
+When	&6399 \\
+What		&48698 \\
+Who	&9147 \\
+Where	&3571 \\
+Why	&1183 \\
+Others	&7305 \\
 \end{tabular}
 \end{center}
 \end{table}
 
-\section{Final instructions}
-Do not change any aspects of the formatting parameters in the style files.
-In particular, do not modify the width or length of the rectangle the text
-should fit into, and do not change font sizes (except perhaps in the
-\textbf{References} section; see below). Please note that pages should be
-numbered.
+\begin{figure}[t]
+\centering
+\includegraphics[width=34pc]{figures/analysis}
+\caption{\small Context and Question Length for Train and Dev Dataset \space\space}
+\label{fig:analysis}
+\end{figure}
 
-\section{Preparing PostScript or PDF files}
+From the figure ~\ref{fig:analysis}, we found that 99.99\% of the contexts had a length of 649 or below and 99.99\% of the questions had a length of 36 or below. Although we tried using the max length of the context and the question, due to memory constraints and faster iteration, we stuck to initial parameters of 600 for context length and 30 for question length.
 
-Please prepare PostScript or PDF files with paper size ``US Letter'', and
-not, for example, ``A4''. The -t
-letter option on dvips will produce US Letter files.
+\begin{figure}[t]
+\centering
+\includegraphics[width=34pc]{figures/start-end}
+\caption{\small The start fraction and the end fraction in the Train Dataset \space\space}
+\label{fig:startend}
+\end{figure}
 
-Fonts were the main cause of problems in the past years. Your PDF file must
-only contain Type 1 or Embedded TrueType fonts. Here are a few instructions
-to achieve this.
+From the figure ~\ref{fig:startend}, We found that a lot of the start position of the answer was the beginning of the context and similarly a lot of the end position of the answer was the end of the context. This also led us to force a certain width between the start position and end position during prediction.
 
-\begin{itemize}
+\section{Implementation Details}
 
-\item You can check which fonts a PDF files uses.  In Acrobat Reader,
-select the menu Files$>$Document Properties$>$Fonts and select Show All Fonts. You can
-also use the program \verb+pdffonts+ which comes with \verb+xpdf+ and is
-available out-of-the-box on most Linux machines.
+This section lists the various hyper-parameters in our model. We had used a maximum word length of 16, a character embedding size of 20 and GloVe word embedding size of 100. We used a CNN with a window width of 5 and an output layer size of 100. For the Seq2Seq layer, the context was trimmed to a length of 600 words, the questions were were trimmed to a length of 30 words and the size of the hidden layer is 200.
 
-\item The IEEE has recommendations for generating PDF files whose fonts
-are also acceptable for NIPS. Please see
-\url{http://www.emfield.org/icuwb2010/downloads/IEEE-PDF-SpecV32.pdf}
+\section{Results and Analysis}
 
-\item LaTeX users:
+\begin{table}[t]
+\caption{Performance Comparison}
+\label{performance-table}
+\begin{center}
+\begin{tabular}{lll}
+\multicolumn{1}{c}{\bf Model}  &\multicolumn{1}{c}{\bf F1}	&\multicolumn{1}{c}{\bf EM}
+\\ \hline \\
+Baseline         &42.98	&33.77\\
+Baseline with BiDaF Attention             &49.72	&39.87 \\
+Co-Attention with GRU	&68	&58 \\
+Co-Attention with LSTM	&69.30	&58.12 \\
+Co-Attention with LSTM and Char Embedding	&70.09	&59.23 \\
+Co-Attention with LSTM and CharCNN	&70.53	&59.36 \\
+Co-Attention with LSTM and CharCNN and DP	&72.60	&60.20 \\
+\end{tabular}
+\end{center}
+\end{table}
 
-\begin{itemize}
+We've summarized our results in the Table ~\ref{table:performance-table}. We started with the baseline code that gave us an F1 measure of 42.98. As a first improvement, we substituted 
+the Basic Attention in the Baseline with the BiDAF and this gave us an F1 of 49.72. We then substituted this with the Co-Attention with GRUs and this gave us a huge boost with an F1 of 68.
+We explored 3 minor improvements on top of the Co-Attention - in the first model, we substituted the GRUs with LSTMs and this gave us 1 point increase. We then added character embeddings
+(without the CNN) and this gave us another point increase and then added 1 layer of 1D CNN and this gave us a 0.5 point increase. We then used Dynamic Programming to intelligently choose and
+end index such that end index is always greater than the start index and this gave us 2 point increase in the dev set. \\
 
-\item Consider directly generating PDF files using \verb+pdflatex+
-(especially if you are a MiKTeX user). 
-PDF figures must be substituted for EPS figures, however.
+We analyzed some examples of predicted answers by this model and below are some problems observed.
 
-\item Otherwise, please generate your PostScript and PDF files with the following commands:
-\begin{verbatim} 
-dvips mypaper.dvi -t letter -Ppdf -G0 -o mypaper.ps
-ps2pdf mypaper.ps mypaper.pdf
-\end{verbatim}
+\textbf{Incorrect boundaries :}
 
-Check that the PDF files only contains Type 1 fonts. 
-%For the final version, please send us both the Postscript file and
-%the PDF file. 
+Our model has a tendency to predict longer answers. Here is an example - 
 
-\item xfig "patterned" shapes are implemented with 
-bitmap fonts.  Use "solid" shapes instead. 
-\item The \verb+\bbold+ package almost always uses bitmap
-fonts.  You can try the equivalent AMS Fonts with command
-\begin{verbatim}
-\usepackage[psamsfonts]{amssymb}
-\end{verbatim}
- or use the following workaround for reals, natural and complex: 
-\begin{verbatim}
-\newcommand{\RR}{I\!\!R} %real numbers
-\newcommand{\Nat}{I\!\!N} %natural numbers 
-\newcommand{\CC}{I\!\!\!\!C} %complex numbers
-\end{verbatim}
+\fbox{ 
+  \parbox{\textwidth}{%
+     \textbf{QUESTION:} when forces are acting on an extended body , what do you need to account for motion effects ? \\
+     \textbf{TRUE ANSWER:} respective lines of application \\
+     \textbf{PREDICTED ANSWER:} their respective lines of application must also be specified in order
+     }%
+ }
 
-\item Sometimes the problematic fonts are used in figures
-included in LaTeX files. The ghostscript program \verb+eps2eps+ is the simplest
-way to clean such figures. For black and white figures, slightly better
-results can be achieved with program \verb+potrace+.
-\end{itemize}
-\item MSWord and Windows users (via PDF file):
-\begin{itemize}
-\item Install the Microsoft Save as PDF Office 2007 Add-in from
-\url{http://www.microsoft.com/downloads/details.aspx?displaylang=en\&familyid=4d951911-3e7e-4ae6-b059-a2e79ed87041}
-\item Select ``Save or Publish to PDF'' from the Office or File menu
-\end{itemize}
-\item MSWord and Mac OS X users (via PDF file):
-\begin{itemize}
-\item From the print menu, click the PDF drop-down box, and select ``Save
-as PDF...''
-\end{itemize}
-\item MSWord and Windows users (via PS file):
-\begin{itemize}
-\item To create a new printer
-on your computer, install the AdobePS printer driver and the Adobe Distiller PPD file from
-\url{http://www.adobe.com/support/downloads/detail.jsp?ftpID=204} {\it Note:} You must reboot your PC after installing the
-AdobePS driver for it to take effect.
-\item To produce the ps file, select ``Print'' from the MS app, choose
-the installed AdobePS printer, click on ``Properties'', click on ``Advanced.''
-\item Set ``TrueType Font'' to be ``Download as Softfont''
-\item Open the ``PostScript Options'' folder
-\item Select ``PostScript Output Option'' to be ``Optimize for Portability''
-\item Select ``TrueType Font Download Option'' to be ``Outline''
-\item Select ``Send PostScript Error Handler'' to be ``No''
-\item Click ``OK'' three times, print your file.
-\item Now, use Adobe Acrobat Distiller or ps2pdf to create a PDF file from
-the PS file. In Acrobat, check the option ``Embed all fonts'' if
-applicable.
-\end{itemize}
+Although the predicted answer includes the expected answer, there are additional words in context that are included as well. We tried to alleviate this problem by trying to predict the answer end index to be within a window of size 'K'.
+We incorporated this in the prediction. \\
 
-\end{itemize}
-If your file contains Type 3 fonts or non embedded TrueType fonts, we will
-ask you to fix it. 
+\textbf{Redundant words with the question:} \\
+Our model has a tendency to predict answers that have redundant words with the question. For example, below, the predicted answers could very well ignore the phrases like "per year" or "in general". \\
 
-\subsection{Margins in LaTeX}
+\fbox{ 
+  \parbox{\textwidth}{%
+	\textbf{QUESTION:} what did itv increase their yearly offer for control of the rights to broadcast the primer league to ? \\
+	\textbf{TRUE ANSWER:} £34m \\
+	\textbf{PREDICTED ANSWER:} £34m per year
+}%
+}
+
+\fbox{ 
+  \parbox{\textwidth}{%
+     \textbf{QUESTION:} besides the study of prime numbers , what general theory was considered the official example of pure mathematics ? \\
+      \textbf{TRUE ANSWER:} number theory \\
+      \textbf{PREDICTED ANSWER:} number theory in general
+      }%
+}
+
+\textbf{Attention does not distribute weights correctly:} \\
+Sometimes, our models weighs certain parts of the context over the other, and ends up giving completely wrong answer.
+In the example below, the attention layer should have picked "chen 's theorem", as we have C2Q and Q2C attentions. However, the model completely ignored the question.
+We observed this problem, mostly for longer context > 150.
+
+\fbox{ 
+  \parbox{\textwidth}{%
+   \textbf{CONTEXT:} in addition to the riemann hypothesis , many more conjectures revolving about primes have been posed . often having an elementary formulation , many of these conjectures have withst
+ood a proof for decades : all four of landau 's problems from 1912 are still unsolved . one of them is goldbach 's conjecture , which asserts that every even integer
+n greater than 2 can be written as a sum of two primes . as of february 2011 [ update ] , this conjecture has been verified for all numbers up to n = 2 · 1017 . weaker statements t
+han this have been proven , for example vinogradov 's theorem says that every sufficiently large odd integer can be written as a sum of three primes . chen 's theorem says that every sufficiently large even number can be expressed as the sum of a prime and a semiprime , the product of two primes . also , any even integer can be written as the sum of six primes . the branch of number theory studying such questions is called additive number theory . \\
+\textbf{QUESTION:} which theorem states that every large even integer can be written as a prime summed with a semiprime ? \\
+\textbf{TRUE ANSWER:} chen 's theorem \\
+\textbf{PREDICTED ANSWER:} goldbach 's conjecture
+ }%
+ }
  
-Most of the margin problems come from figures positioned by hand using
-\verb+\special+ or other commands. We suggest using the command
-\verb+\includegraphics+
-from the graphicx package. Always specify the figure width as a multiple of
-the line width as in the example below using .eps graphics
-\begin{verbatim}
-   \usepackage[dvips]{graphicx} ... 
-   \includegraphics[width=0.8\linewidth]{myfile.eps} 
-\end{verbatim}
-or % Apr 2009 addition
-\begin{verbatim}
-   \usepackage[pdftex]{graphicx} ... 
-   \includegraphics[width=0.8\linewidth]{myfile.pdf} 
-\end{verbatim}
-for .pdf graphics. 
-See section 4.4 in the graphics bundle documentation (\url{http://www.ctan.org/tex-archive/macros/latex/required/graphics/grfguide.ps}) 
- 
-A number of width problems arise when LaTeX cannot properly hyphenate a
-line. Please give LaTeX hyphenation hints using the \verb+\-+ command.
+\textbf{Human responses :} \\ 
+Many times, our model does a good job at predicting the answer, but it does not match the human responses. \\
 
+\fbox{ 
+  \parbox{\textwidth}{%
+   \textbf{QUESTION:} what division offers more then one branch of studies that do n't fit in with the other four ?\\
+    \textbf{TRUE ANSWER:} the new collegiate division \\
+    \textbf{PREDICTED ANSWER:} new collegiate division
+    }%
+}    
 
-\subsubsection*{Acknowledgments}
+\section{Acknowledgments}
 
-Use unnumbered third level headings for the acknowledgments. All
-acknowledgments go at the end of the paper. Do not include 
-acknowledgments in the anonymized submission, only in the 
-final paper. 
+The authors would like to thank Richard Socher and the TAs for insightful discussions and timely feedback 
+about improving the models. They also want to thank the classmates for creating a competitive and exciting leader
+board.
 
-\subsubsection*{References}
-
-References follow the acknowledgments. Use unnumbered third level heading for
-the references. Any choice of citation style is acceptable as long as you are
-consistent. It is permissible to reduce the font size to `small' (9-point) 
-when listing the references. {\bf Remember that this year you can use
-a ninth page as long as it contains \emph{only} cited references.}
+\section{References}
 
 \small{
-[1] Alexander, J.A. \& Mozer, M.C. (1995) Template-based algorithms
-for connectionist rule extraction. In G. Tesauro, D. S. Touretzky
-and T.K. Leen (eds.), {\it Advances in Neural Information Processing
-Systems 7}, pp. 609-616. Cambridge, MA: MIT Press.
+[1] Min Joon Seo \& Aniruddha Kembhavi \& Ali Farhadi \& 
+Hannaneh Hajishirzi (2016) Bidirectional Attention Flow 
+for Machine Comprehension. arXiv preprint arXiv:1611.01603, 2016.
 
-[2] Bower, J.M. \& Beeman, D. (1995) {\it The Book of GENESIS: Exploring
-Realistic Neural Models with the GEneral NEural SImulation System.}
-New York: TELOS/Springer-Verlag.
+[2] Bhuwan Dhingra \& Hanxiao Liu \& Zhilin Yang \& William W Cohen
+\& Ruslan Salakhutdinov. Gated-attention readers for text comprehension. 
+arXiv preprint arXiv:1606.01549, 2016.
 
-[3] Hasselmo, M.E., Schnell, E. \& Barkai, E. (1995) Dynamics of learning
-and recall at excitatory recurrent synapses and cholinergic modulation
-in rat hippocampal region CA3. {\it Journal of Neuroscience}
-{\bf 15}(7):5249-5262.
+[3] Caiming Xiong \& Victor Zhong \& and Richard Socher. 
+Dynamic coattention networks for question answering.
+arXiv preprint arXiv:1611.01604, 2016.
+
 }
 
 \end{document}
